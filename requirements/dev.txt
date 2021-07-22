@@ -4,9 +4,9 @@
 #
 #    pip-compile --output-file requirements/dev.txt requirements/dev.in
 #
--e git+https://github.com/kytos/kytos.git#egg=kytos
+-e git+https://github.com/kytos-ng/kytos.git#egg=kytos
 -e .
--e git+https://github.com/kytos/python-openflow.git#egg=python-openflow
+-e git+https://github.com/kytos-ng/python-openflow.git#egg=python-openflow
 astroid==2.3.3            # via pylint
 backcall==0.1.0           # via ipython
 click==7.1.1              # via flask, pip-tools
@@ -40,7 +40,7 @@ ptyprocess==0.6.0         # via pexpect
 py==1.8.1                 # via tox
 pycodestyle==2.5.0        # via yala
 pydocstyle==5.1.1         # via yala
-pygments==2.7.1           # via ipython
+pygments==2.8.1           # via ipython
 pyjwt==1.7.1
 pylint==2.4.4             # via yala
 python-daemon==2.2.4
