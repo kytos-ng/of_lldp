@@ -100,7 +100,7 @@ class Main(KytosNApp):
 
                 log.debug(
                     msg,
-                    switch.connection.address, switch.dpid,
+                    switch.connection, switch.dpid,
                     switch.interfaces, ethernet.ether_type,
                     ethernet.source, ethernet.destination,
                     switch.dpid, interface.port_number)
