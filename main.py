@@ -90,18 +90,16 @@ class Main(KytosNApp):
                     "Sending a LLDP PacketOut to the switch %s",
                     switch.dpid)
 
-                msg = '\n'
-                msg += 'Switch: %s (%s)\n'
-                msg += ' Interfaces: %s\n'
-                msg += ' -- LLDP PacketOut --\n'
-                msg += ' Ethernet: eth_type (%s) | src (%s) | dst (%s)'
-                msg += '\n'
-                msg += ' LLDP: Switch (%s) | port (%s)'
+                msg += 'Switch: %s (%s)'
+                msg += ' Interface: %s'
+                msg += ' -- LLDP PacketOut --'
+                msg += ' Ethernet: eth_type (%s) | src (%s) | dst (%s) /'
+                msg += ' LLDP: Switch (%s) | portno (%s)'
 
                 log.debug(
                     msg,
                     switch.connection, switch.dpid,
-                    switch.interfaces, ethernet.ether_type,
+                    interface.id, ethernet.ether_type,
                     ethernet.source, ethernet.destination,
                     switch.dpid, interface.port_number)
 
