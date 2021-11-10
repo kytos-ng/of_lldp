@@ -90,7 +90,7 @@ class Main(KytosNApp):
                     "Sending a LLDP PacketOut to the switch %s",
                     switch.dpid)
 
-                msg += 'Switch: %s (%s)'
+                msg = 'Switch: %s (%s)'
                 msg += ' Interface: %s'
                 msg += ' -- LLDP PacketOut --'
                 msg += ' Ethernet: eth_type (%s) | src (%s) | dst (%s) /'
