@@ -124,6 +124,20 @@ class Main(KytosNApp):
         except AttributeError:
             of_version = None
 
+        def _retry_if_status_code(response, endpoint, data, status_codes):
+            """Retry if the response is in the status_codes."""
+            if response.status_code not in status_codes:
+                return
+            data = dict(data)
+            data["force"] = True
+            res = requests.post(endpoint, json=data)
+            method = res.request.method
+            if res.status_code != 202:
+                log.error(f"Failed to retry on {endpoint}, error: {res.text},"
+                          f" status: {res.status_code}, method: {method}")
+                return
+            log.info(f"Successfully forced {method} flows to {endpoint}")
+
         flow = self._build_lldp_flow(of_version)
         if flow:
             destination = switch.id
@@ -134,23 +148,13 @@ class Main(KytosNApp):
                 if res.status_code != 202:
                     log.error(f"Failed to push flows on {destination},"
                               f" error: {res.text}, " f"status: {res.status_code}")
-                if res.status_code == 424:
-                    data["force"] = True
-                    res = requests.post(endpoint, json=data)
-                    if res.status_code != 202:
-                        return
-                    log.info(f"Successfully force pushed flows to {destination}")
+                _retry_if_status_code(res, endpoint, data, [424])
             else:
                 res = requests.delete(endpoint, json=data)
                 if res.status_code != 202:
                     log.error(f"Failed to delete flows on {destination},"
                               f" error: {res.text}, " f"status: {res.status_code}")
-                if res.status_code == 424:
-                    data["force"] = True
-                    res = requests.post(endpoint, json=data)
-                    if res.status_code != 202:
-                        return
-                    log.info(f"Successfully force deleted flows to {destination}")
+                _retry_if_status_code(res, endpoint, data, [424])
 
     @listen_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
     def notify_uplink_detected(self, event):
