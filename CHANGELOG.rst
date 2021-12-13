@@ -24,6 +24,15 @@ Security
 ========
 
 
+[1.1.1] - 2021-12-13
+********************
+Changed
+=======
+- Added support for retries when sending a request to ``flow_manager``
+- Parametrized ``force`` option as a fallback
+- Added more logs for request errors
+
+
 [1.1.1] - 2021-04-22
 ********************
 Changed
