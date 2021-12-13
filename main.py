@@ -128,11 +128,17 @@ class Main(KytosNApp):
         if flow:
             destination = switch.id
             endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{destination}'
-            data = {'flows': [flow]}
+            data = {'force': True, 'flows': [flow]}
             if event.name == 'kytos/topology.switch.enabled':
-                requests.post(endpoint, json=data)
+                res = requests.post(endpoint, json=data)
+                if res.status_code != 202:
+                    log.error(f"Failed to push flows on {destination} error: "
+                              f"{res.text}, status: {res.status_code}")
             else:
-                requests.delete(endpoint, json=data)
+                res = requests.delete(endpoint, json=data)
+                if res.status_code != 202:
+                    log.error(f"Failed to delete flows on {destination} error:"
+                              f" {res.text}, status: {res.status_code}")
 
     @listen_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
     def notify_uplink_detected(self, event):
