@@ -117,6 +117,15 @@ class Main(KytosNApp):
                 Event with new switch information.
 
         """
+        self._handle_lldp_flows(event)
+
+    def _handle_lldp_flows(self, event):
+        """Install or remove flows in a switch.
+
+        Install a flow to send LLDP packets to the controller. The proactive
+        flow is installed whenever a switch is enabled. If the switch is
+        disabled the flow is removed.
+        """
         try:
             dpid = event.content['dpid']
             switch = self.controller.get_switch_by_dpid(dpid)
@@ -156,14 +165,14 @@ class Main(KytosNApp):
                     log.error(f"Failed to push flows on {destination},"
                               f" error: {res.text}, status: {res.status_code},"
                               f" data: {data}")
-                _retry_if_status_code(res, endpoint, data, [424])
+                _retry_if_status_code(res, endpoint, data, [424, 500])
             else:
                 res = requests.delete(endpoint, json=data)
                 if res.status_code != 202:
                     log.error(f"Failed to delete flows on {destination},"
                               f" error: {res.text}, status: {res.status_code}",
                               f" data: {data}")
-                _retry_if_status_code(res, endpoint, data, [424])
+                _retry_if_status_code(res, endpoint, data, [424, 500])
 
     @listen_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
     def notify_uplink_detected(self, event):
