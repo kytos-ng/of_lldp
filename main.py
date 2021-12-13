@@ -128,17 +128,29 @@ class Main(KytosNApp):
         if flow:
             destination = switch.id
             endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{destination}'
-            data = {'force': True, 'flows': [flow]}
+            data = {'flows': [flow]}
             if event.name == 'kytos/topology.switch.enabled':
                 res = requests.post(endpoint, json=data)
                 if res.status_code != 202:
-                    log.error(f"Failed to push flows on {destination} error: "
-                              f"{res.text}, status: {res.status_code}")
+                    log.error(f"Failed to push flows on {destination},"
+                              f" error: {res.text}, " f"status: {res.status_code}")
+                if res.status_code == 424:
+                    data["force"] = True
+                    res = requests.post(endpoint, json=data)
+                    if res.status_code != 202:
+                        return
+                    log.info(f"Successfully force pushed flows to {destination}")
             else:
                 res = requests.delete(endpoint, json=data)
                 if res.status_code != 202:
-                    log.error(f"Failed to delete flows on {destination} error:"
-                              f" {res.text}, status: {res.status_code}")
+                    log.error(f"Failed to delete flows on {destination},"
+                              f" error: {res.text}, " f"status: {res.status_code}")
+                if res.status_code == 424:
+                    data["force"] = True
+                    res = requests.post(endpoint, json=data)
+                    if res.status_code != 202:
+                        return
+                    log.info(f"Successfully force deleted flows to {destination}")
 
     @listen_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
     def notify_uplink_detected(self, event):
