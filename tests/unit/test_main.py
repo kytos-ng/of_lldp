@@ -94,7 +94,7 @@ class TestMain(TestCase):
         mock = MagicMock()
         mock.request.method = "POST"
         mock.status_code = 500
-        mock.text = "Switch not connected"
+        mock.text = "some_err"
         mock_post.return_value = mock
         self.napp._handle_lldp_flows(event_post)
         self.assertTrue(mock_post.call_count, 3)
