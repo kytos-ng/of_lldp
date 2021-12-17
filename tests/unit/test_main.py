@@ -81,6 +81,24 @@ class TestMain(TestCase):
         self.napp.handle_lldp_flows(event_del)
         mock_delete.assert_called()
 
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_handle_lldp_flows_retries(self, mock_post, _):
+        """Test handle_lldp_flow method retries."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+        self.napp.controller.switches = {dpid: switch}
+        event_post = get_kytos_event_mock(name="kytos/topology.switch.enabled",
+                                          content={"dpid": dpid})
+
+        mock = MagicMock()
+        mock.request.method = "POST"
+        mock.status_code = 500
+        mock.text = "some_err"
+        mock_post.return_value = mock
+        self.napp._handle_lldp_flows(event_post)
+        self.assertTrue(mock_post.call_count, 3)
+
     @patch('kytos.core.buffers.KytosEventBuffer.put')
     @patch('napps.kytos.of_lldp.main.KytosEvent')
     @patch('kytos.core.controller.Controller.get_switch_by_dpid')
