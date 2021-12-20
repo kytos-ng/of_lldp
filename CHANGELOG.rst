@@ -23,6 +23,13 @@ Fixed
 Security
 ========
 
+[1.3.0] - 2021-12-20
+********************
+
+Added
+=====
+- Set ``cookie`` and ``cookie_mask`` when sending requests to ``flow_manager``
+
 
 [1.2.0] - 2021-12-13
 ********************
