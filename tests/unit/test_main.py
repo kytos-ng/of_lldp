@@ -6,6 +6,7 @@ from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
                                get_switch_mock, get_test_client)
 
 from tests.helpers import get_topology_mock
+from napps.kytos.of_lldp.utils import get_cookie
 
 
 # pylint: disable=protected-access
@@ -196,6 +197,7 @@ class TestMain(TestCase):
         mock_settings.FLOW_VLAN_VID = None
         mock_settings.FLOW_PRIORITY = 1500
         mock_settings.TABLE_ID = 0
+        dpid = "00:00:00:00:00:00:00:01"
 
         flow = {}
         match = {}
@@ -206,6 +208,10 @@ class TestMain(TestCase):
         flow['match'] = match
         expected_flow_v0x01 = flow.copy()
         expected_flow_v0x04 = flow.copy()
+        expected_flow_v0x01['cookie'] = get_cookie(dpid)
+        expected_flow_v0x01['cookie_mask'] = 0xffffffffffffffff
+        expected_flow_v0x04['cookie'] = get_cookie(dpid)
+        expected_flow_v0x04['cookie_mask'] = 0xffffffffffffffff
 
         expected_flow_v0x01['actions'] = [{'action_type': 'output',
                                            'port': 123}]
@@ -213,8 +219,8 @@ class TestMain(TestCase):
         expected_flow_v0x04['actions'] = [{'action_type': 'output',
                                            'port': 1234}]
 
-        flow_mod10 = self.napp._build_lldp_flow(0x01)
-        flow_mod13 = self.napp._build_lldp_flow(0x04)
+        flow_mod10 = self.napp._build_lldp_flow(0x01, get_cookie(dpid))
+        flow_mod13 = self.napp._build_lldp_flow(0x04, get_cookie(dpid))
 
         self.assertDictEqual(flow_mod10, expected_flow_v0x01)
         self.assertDictEqual(flow_mod13, expected_flow_v0x04)
