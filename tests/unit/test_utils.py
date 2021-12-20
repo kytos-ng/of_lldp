@@ -1,6 +1,7 @@
 """Test utils module."""
 from unittest import TestCase
-from napps.kytos.of_lldp.utils import int_dpid, get_cookie
+
+from napps.kytos.of_lldp.utils import get_cookie, int_dpid
 
 
 class TestUtils(TestCase):
@@ -22,7 +23,8 @@ class TestUtils(TestCase):
             with self.subTest(dpid=dpid, expected_dpid=expected_dpid):
                 assert int_dpid(dpid) == expected_dpid
 
-    def test_get_cookie(self):
+    @staticmethod
+    def test_get_cookie():
         """Test get_cookie."""
         dpid = "00:00:00:00:00:00:00:01"
         assert hex(get_cookie(dpid)) == hex(0xbb00000000000001)

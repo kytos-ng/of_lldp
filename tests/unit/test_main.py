@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, call, patch
 from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
                                get_switch_mock, get_test_client)
 
-from tests.helpers import get_topology_mock
 from napps.kytos.of_lldp.utils import get_cookie
+from tests.helpers import get_topology_mock
 
 
 # pylint: disable=protected-access
