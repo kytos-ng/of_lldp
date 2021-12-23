@@ -161,6 +161,7 @@ class Main(KytosNApp):
             endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{destination}'
             data = {'flows': [flow]}
             if event.name == 'kytos/topology.switch.enabled':
+                flow.pop("cookie_mask")
                 res = requests.post(endpoint, json=data)
                 if res.status_code != 202:
                     log.error(f"Failed to push flows on {destination},"
