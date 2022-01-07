@@ -1,6 +1,8 @@
 """NApp responsible to discover new switches and hosts."""
 import struct
 import time
+from collections import defaultdict
+from threading import Lock
 
 import requests
 from flask import jsonify, request
@@ -25,6 +27,9 @@ class Main(KytosNApp):
         """Make this NApp run in a loop."""
         self.vlan_id = None
         self.polling_time = settings.POLLING_TIME
+        self.ignored_loops = settings.LLDP_IGNORED_LOOPS
+        self.counter_lock = Lock()
+        self.loop_counter = defaultdict(dict)
         if hasattr(settings, "FLOW_VLAN_VID"):
             self.vlan_id = settings.FLOW_VLAN_VID
         self.execute_as_loop(self.polling_time)
@@ -174,7 +179,65 @@ class Main(KytosNApp):
                               f" data: {data}")
                 _retry_if_status_code(res, endpoint, data, [424, 500])
 
+    def _is_port_looped(self, dpid_a, port_a, dpid_b, port_b):
+        """Check if tuple (dpid_a, port_a, dpid_b, port_b) is looped."""
+        if dpid_a == dpid_b and port_a != port_b:
+            return True
+        return False
+
+    def _is_loop_ignored(self, dpid, port_a, port_b):
+        """Check if a loop is ignored."""
+        if dpid not in self.ignored_loops:
+            return False
+        if any(
+            (
+                (port_a, port_b) in self.ignored_loops[dpid],
+                (port_b, port_a) in self.ignored_loops[dpid],
+            )
+        ):
+            return True
+        return False
+
+    def lldp_loop_handler(
+        self,
+        switch,
+        interface_a,
+        interface_b,
+        action=settings.LLDP_LOOP_ACTION,
+    ):
+        """Handler to execute when a LLDP loop is found."""
+        if action == "log":
+            port_a = interface_a.port_number
+            port_b = interface_b.port_number
+            port_pair = (port_a, port_b)
+            log_every = settings.LOOP_LOG_EVERY
+            with self.counter_lock:
+                if port_pair not in self.loop_counter[switch.id]:
+                    self.loop_counter[switch.id][port_pair] = 0
+                else:
+                    self.loop_counter[switch.id][port_pair] += 1
+                    self.loop_counter[switch.id][port_pair] %= log_every
+                count = self.loop_counter[switch.id][port_pair]
+                if count % settings.LOOP_LOG_EVERY != 0:
+                    return
+
+            log.warning(
+                f"LLDP loop detected on switch: {switch.id}, "
+                f"interface_a: {interface_a.name}, number: {port_a}, "
+                f"interface_b: {interface_b.name}, number: {port_b}"
+            )
+
     @listen_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
+    def on_ofpt_packet_in(self, event):
+        """Dispatch two KytosEvents to notify identified NNI interfaces.
+
+        Args:
+            event (:class:`~kytos.core.events.KytosEvent`):
+                Event with an LLDP packet as data.
+
+        """
+        self.notify_uplink_detected(event)
+
     def notify_uplink_detected(self, event):
         """Dispatch two KytosEvents to notify identified NNI interfaces.
 
@@ -219,6 +282,19 @@ class Main(KytosNApp):
 
             interface_a = switch_a.get_interface_by_port_no(port_a.value)
             interface_b = switch_b.get_interface_by_port_no(port_b.value)
+
+            dpid_a = switch_a.dpid
+            dpid_b = switch_b.dpid
+            port_a = port_a.value
+            port_b = port_b.value
+            if all(
+                (
+                    self._is_port_looped(dpid_a, port_a, dpid_b, port_b),
+                    not self._is_loop_ignored(dpid_a, port_a, port_b),
+                    port_a < port_b  # only enter one pair
+                )
+            ):
+                self.lldp_loop_handler(switch_a, interface_a, interface_b)
 
             event_out = KytosEvent(name='kytos/of_lldp.interface.is.nni',
                                    content={'interface_a': interface_a,
