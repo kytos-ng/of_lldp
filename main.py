@@ -179,7 +179,8 @@ class Main(KytosNApp):
                               f" data: {data}")
                 _retry_if_status_code(res, endpoint, data, [424, 500])
 
-    def _is_port_looped(self, dpid_a, port_a, dpid_b, port_b):
+    @staticmethod
+    def _is_port_looped(dpid_a, port_a, dpid_b, port_b):
         """Check if tuple (dpid_a, port_a, dpid_b, port_b) is looped."""
         if dpid_a == dpid_b and port_a != port_b:
             return True

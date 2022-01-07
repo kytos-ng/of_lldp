@@ -8,7 +8,7 @@ from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
 from tests.helpers import get_topology_mock
 
 
-# pylint: disable=protected-access
+# pylint: disable=protected-access,too-many-public-methods
 class TestMain(TestCase):
     """Tests for the Main class."""
 
@@ -157,12 +157,14 @@ class TestMain(TestCase):
     def test_is_port_looped(self):
         """Test is_port_looped cases."""
 
+        dpid_a = "00:00:00:00:00:00:00:01"
+        dpid_b = "00:00:00:00:00:00:00:02"
         values = [
-            ("00:00:00:00:00:00:00:01", 7, "00:00:00:00:00:00:00:01", 6, True),
-            ("00:00:00:00:00:00:00:01", 1, "00:00:00:00:00:00:00:01", 2, True),
-            ("00:00:00:00:00:00:00:01", 7, "00:00:00:00:00:00:00:01", 7, False),
-            ("00:00:00:00:00:00:00:01", 1, "00:00:00:00:00:00:00:02", 2, False),
-            ("00:00:00:00:00:00:00:01", 2, "00:00:00:00:00:00:00:02", 1, False),
+            (dpid_a, 7, dpid_a, 6, True),
+            (dpid_a, 1, dpid_a, 2, True),
+            (dpid_a, 7, dpid_a, 7, False),
+            (dpid_a, 1, dpid_b, 2, False),
+            (dpid_a, 2, dpid_b, 1, False),
         ]
         for dpid_a, port_a, dpid_b, port_b, looped in values:
             with self.subTest(dpid_a=dpid_a, port_a=port_a, port_b=port_b,
@@ -180,8 +182,8 @@ class TestMain(TestCase):
         port_b = 2
         self.napp.ignored_loops[dpid] = {(port_a, port_b)}
 
-        assert self.napp._is_loop_ignored(dpid, port_a, port_b)
-        assert self.napp._is_loop_ignored(dpid, port_b, port_a)
+        assert self.napp._is_loop_ignored(dpid, port_a=port_a, port_b=port_b)
+        assert self.napp._is_loop_ignored(dpid, port_a=port_b, port_b=port_a)
 
         assert not self.napp._is_loop_ignored(dpid, port_a + 20, port_b)
 
