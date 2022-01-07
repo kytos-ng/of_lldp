@@ -99,6 +99,8 @@ class TestMain(TestCase):
         self.napp._handle_lldp_flows(event_post)
         self.assertTrue(mock_post.call_count, 3)
 
+    @patch('napps.kytos.of_lldp.main.Main._is_port_looped')
+    @patch('napps.kytos.of_lldp.main.Main._is_loop_ignored')
     @patch('kytos.core.buffers.KytosEventBuffer.put')
     @patch('napps.kytos.of_lldp.main.KytosEvent')
     @patch('kytos.core.controller.Controller.get_switch_by_dpid')
@@ -111,7 +113,7 @@ class TestMain(TestCase):
         """Test notify_uplink_detected method."""
         (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
          mock_unpack_non_empty, mock_get_switch_by_dpid, mock_kytos_event,
-         mock_buffer_put) = args
+         mock_buffer_put, mock_loop_ignored, mock_port_looped) = args
 
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         message = MagicMock()
@@ -122,6 +124,9 @@ class TestMain(TestCase):
                                      content={'source': switch.connection,
                                               'message': message})
 
+        mocked = MagicMock()
+        mocked.value = 1
+        mock_ubint32.return_value = mocked
         ethernet = MagicMock()
         ethernet.ether_type = 0x88CC
         ethernet.data = 'eth_data'
@@ -131,6 +136,7 @@ class TestMain(TestCase):
         dpid = MagicMock()
         dpid.value = "00:00:00:00:00:00:00:02"
         port_b = MagicMock()
+        port_b.value = 2
 
         mock_unpack_non_empty.side_effect = [ethernet, lldp, dpid, port_b]
         mock_get_switch_by_dpid.return_value = get_switch_mock(dpid.value,
@@ -145,6 +151,56 @@ class TestMain(TestCase):
                  call(mock_ubint32, lldp.port_id.sub_value)]
         mock_unpack_non_empty.assert_has_calls(calls)
         mock_buffer_put.assert_called_with('nni')
+        mock_loop_ignored.assert_called()
+        mock_port_looped.assert_called()
+
+    def test_is_port_looped(self):
+        """Test is_port_looped cases."""
+
+        values = [
+            ("00:00:00:00:00:00:00:01", 7, "00:00:00:00:00:00:00:01", 6, True),
+            ("00:00:00:00:00:00:00:01", 1, "00:00:00:00:00:00:00:01", 2, True),
+            ("00:00:00:00:00:00:00:01", 7, "00:00:00:00:00:00:00:01", 7, False),
+            ("00:00:00:00:00:00:00:01", 1, "00:00:00:00:00:00:00:02", 2, False),
+            ("00:00:00:00:00:00:00:01", 2, "00:00:00:00:00:00:00:02", 1, False),
+        ]
+        for dpid_a, port_a, dpid_b, port_b, looped in values:
+            with self.subTest(dpid_a=dpid_a, port_a=port_a, port_b=port_b,
+                              looped=looped):
+                assert (
+                    self.napp._is_port_looped(dpid_a, port_a, dpid_b, port_b)
+                    == looped
+                )
+
+    def test_is_loop_ignored(self):
+        """Test is_loop_ignored."""
+
+        dpid = "00:00:00:00:00:00:00:01"
+        port_a = 1
+        port_b = 2
+        self.napp.ignored_loops[dpid] = {(port_a, port_b)}
+
+        assert self.napp._is_loop_ignored(dpid, port_a, port_b)
+        assert self.napp._is_loop_ignored(dpid, port_b, port_a)
+
+        assert not self.napp._is_loop_ignored(dpid, port_a + 20, port_b)
+
+        dpid = "00:00:00:00:00:00:00:02"
+        assert not self.napp._is_loop_ignored(dpid, port_a, port_b)
+
+    @patch('napps.kytos.of_lldp.main.log')
+    def test_lldp_loop_handler_log_actio(self, mock_log):
+        """Test lldp_loop_handler log action."""
+
+        switch = MagicMock()
+        dpid = "00:00:00:00:00:00:00:01"
+        switch.id = dpid
+        intf_a = MagicMock()
+        intf_a.port_number = 1
+        intf_b = MagicMock()
+        intf_b.port_number = 2
+        self.napp.lldp_loop_handler(switch, intf_a, intf_b, action="log")
+        mock_log.warning.assert_called()
 
     @patch('napps.kytos.of_lldp.main.PO13')
     @patch('napps.kytos.of_lldp.main.PO10')
