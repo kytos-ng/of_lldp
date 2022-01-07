@@ -24,6 +24,16 @@ Security
 ========
 
 
+[1.3.0] - 2022-01-07
+********************
+
+Added
+=====
+
+- Added loop detection feature via LLDP ``ofpt_packet_in``
+- Added settings for loop detection
+
+
 [1.2.0] - 2021-12-13
 ********************
 Changed
