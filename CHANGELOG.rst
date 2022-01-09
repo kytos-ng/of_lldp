@@ -30,7 +30,7 @@ Security
 Added
 =====
 
-- Added loop detection feature via LLDP ``ofpt_packet_in``
+- Added loop detection in the same switch via LLDP ``ofpt_packet_in``
 - Added settings for loop detection
 
 
