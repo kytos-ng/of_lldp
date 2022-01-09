@@ -179,13 +179,6 @@ class Main(KytosNApp):
                               f" data: {data}")
                 _retry_if_status_code(res, endpoint, data, [424, 500])
 
-    @staticmethod
-    def _is_port_looped(dpid_a, port_a, dpid_b, port_b):
-        """Check if tuple (dpid_a, port_a, dpid_b, port_b) is looped."""
-        if dpid_a == dpid_b and port_a != port_b:
-            return True
-        return False
-
     def _is_loop_ignored(self, dpid, port_a, port_b):
         """Check if a loop is ignored."""
         if dpid not in self.ignored_loops:
@@ -198,6 +191,39 @@ class Main(KytosNApp):
         ):
             return True
         return False
+
+    @staticmethod
+    def _is_lldp_looped(dpid_a, port_a, dpid_b, port_b):
+        """Check if LLDP is looped."""
+        if all(
+            (
+                dpid_a == dpid_b,
+                port_a <= port_b  # only enter one pair
+            )
+        ):
+            return True
+        return False
+
+    def process_if_lldp_looped(
+        self,
+        switch_a,
+        interface_a,
+        switch_b,
+        interface_b,
+        action=settings.LLDP_LOOP_ACTION,
+    ):
+        """Process if received LLDP data is looped."""
+        dpid_a = switch_a.dpid
+        dpid_b = switch_b.dpid
+        port_a = interface_a.port_number
+        port_b = interface_b.port_number
+        if all(
+            (
+                self._is_lldp_looped(dpid_a, port_a, dpid_b, port_b),
+                not self._is_loop_ignored(dpid_a, port_a, port_b),
+            )
+        ):
+            self.lldp_loop_handler(switch_a, interface_a, interface_b, action)
 
     def lldp_loop_handler(
         self,
@@ -284,19 +310,8 @@ class Main(KytosNApp):
             interface_a = switch_a.get_interface_by_port_no(port_a.value)
             interface_b = switch_b.get_interface_by_port_no(port_b.value)
 
-            dpid_a = switch_a.dpid
-            dpid_b = switch_b.dpid
-            port_a = port_a.value
-            port_b = port_b.value
-            if all(
-                (
-                    self._is_port_looped(dpid_a, port_a, dpid_b, port_b),
-                    not self._is_loop_ignored(dpid_a, port_a, port_b),
-                    port_a < port_b  # only enter one pair
-                )
-            ):
-                self.lldp_loop_handler(switch_a, interface_a, interface_b)
-
+            self.process_if_lldp_looped(switch_a, interface_a, switch_b,
+                                        interface_b)
             event_out = KytosEvent(name='kytos/of_lldp.interface.is.nni',
                                    content={'interface_a': interface_a,
                                             'interface_b': interface_b})

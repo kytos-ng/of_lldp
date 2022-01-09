@@ -99,8 +99,7 @@ class TestMain(TestCase):
         self.napp._handle_lldp_flows(event_post)
         self.assertTrue(mock_post.call_count, 3)
 
-    @patch('napps.kytos.of_lldp.main.Main._is_port_looped')
-    @patch('napps.kytos.of_lldp.main.Main._is_loop_ignored')
+    @patch('napps.kytos.of_lldp.main.Main.process_if_lldp_looped')
     @patch('kytos.core.buffers.KytosEventBuffer.put')
     @patch('napps.kytos.of_lldp.main.KytosEvent')
     @patch('kytos.core.controller.Controller.get_switch_by_dpid')
@@ -113,7 +112,7 @@ class TestMain(TestCase):
         """Test notify_uplink_detected method."""
         (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
          mock_unpack_non_empty, mock_get_switch_by_dpid, mock_kytos_event,
-         mock_buffer_put, mock_loop_ignored, mock_port_looped) = args
+         mock_buffer_put, mock_process_looped) = args
 
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         message = MagicMock()
@@ -151,18 +150,18 @@ class TestMain(TestCase):
                  call(mock_ubint32, lldp.port_id.sub_value)]
         mock_unpack_non_empty.assert_has_calls(calls)
         mock_buffer_put.assert_called_with('nni')
-        mock_loop_ignored.assert_called()
-        mock_port_looped.assert_called()
+        mock_process_looped.assert_called()
 
-    def test_is_port_looped(self):
-        """Test is_port_looped cases."""
+    def test_is_lldp_looped(self):
+        """Test is_lldp_looped cases."""
 
         dpid_a = "00:00:00:00:00:00:00:01"
         dpid_b = "00:00:00:00:00:00:00:02"
         values = [
-            (dpid_a, 7, dpid_a, 6, True),
+            (dpid_a, 6, dpid_a, 7, True),
             (dpid_a, 1, dpid_a, 2, True),
-            (dpid_a, 7, dpid_a, 7, False),
+            (dpid_a, 7, dpid_a, 7, True),
+            (dpid_a, 8, dpid_a, 1, False),  # port_a > port_b
             (dpid_a, 1, dpid_b, 2, False),
             (dpid_a, 2, dpid_b, 1, False),
         ]
@@ -170,7 +169,7 @@ class TestMain(TestCase):
             with self.subTest(dpid_a=dpid_a, port_a=port_a, port_b=port_b,
                               looped=looped):
                 assert (
-                    self.napp._is_port_looped(dpid_a, port_a, dpid_b, port_b)
+                    self.napp._is_lldp_looped(dpid_a, port_a, dpid_b, port_b)
                     == looped
                 )
 
