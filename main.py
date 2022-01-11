@@ -245,7 +245,7 @@ class Main(KytosNApp):
                     self.loop_counter[switch.id][port_pair] += 1
                     self.loop_counter[switch.id][port_pair] %= log_every
                 count = self.loop_counter[switch.id][port_pair]
-                if count % settings.LOOP_LOG_EVERY != 0:
+                if count != 0:
                     return
 
             log.warning(
