@@ -27,4 +27,4 @@ class TestUtils(TestCase):
     def test_get_cookie():
         """Test get_cookie."""
         dpid = "00:00:00:00:00:00:00:01"
-        assert hex(get_cookie(dpid)) == hex(0xbb00000000000001)
+        assert hex(get_cookie(dpid)) == hex(0xab00000000000001)
