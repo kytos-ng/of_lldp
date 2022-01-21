@@ -23,6 +23,16 @@ Fixed
 Security
 ========
 
+[1.3.1] - 2022-01-21
+********************
+
+Changed
+=======
+- Prefix changed to 0xab
+- Upgraded dependencies
+- Updated README referring Kytos NG
+
+
 [1.3.0] - 2021-12-20
 ********************
 
