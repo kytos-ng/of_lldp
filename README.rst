@@ -1,19 +1,22 @@
-########
+|Stable| |Tag| |License| |Build| |Coverage| |Quality|
+
+.. raw:: html
+
+  <div align="center">
+    <h1><code>kytos/of_lldp</code></h1>
+
+    <strong>NApp responsible for network link discovery through LLDP</strong>
+
+    <h3><a href="https://kytos-ng.github.io/api/of_lldp.html">OpenAPI Docs</a></h3>
+  </div>
+
 Overview
-########
+========
 
-|License| |Build| |Coverage| |Quality|
+This NApp implements the Link Layer Discovery Protocol (LLDP).
 
-.. attention::
-
-    THIS NAPP IS STILL EXPERIMENTAL AND IT'S EVENTS, METHODS AND STRUCTURES MAY
-    CHANGE A LOT ON THE NEXT FEW DAYS/WEEKS, USE IT AT YOUR OWN DISCERNEMENT
-
-The *kytos/of_lldp* application implements the Link Layer Discovery Protocol (LLDP).
-
-############
 How it Works
-############
+============
 
 In order to track connections between switches under the present SDN
 controller, this NAPP uses the LLDP protocol with the following procedure:
@@ -42,87 +45,48 @@ between them. This protocol is implemented at layer 2 (L2) and defined in the
 IEEE 802.1ab. A network management system (NMS) can rapidly obtain the L2
 network topology and topology changes over time using LLDP.
 
-##########
-Installing
-##########
 
-All of the Kytos Network Applications are located in the NApps online
-repository. To install this NApp, run:
+Installing
+==========
+
+To install this NApp, first, make sure to have the same venv activated as you have ``kytos`` installed on:
 
 .. code:: shell
 
-   $ kytos napps install kytos/of_lldp
+   $ git clone https://github.com/kytos-ng/of_lldp.git
+   $ cd of_lldp
+   $ python setup.py develop
 
-############
+
 Requirements
-############
+============
 
-- kytos/of_core
-- kytos/flow_manager
-- kytos/topology
+- `kytos/of_core <https://github.com/kytos-ng/of_core>`_
+- `kytos/flow_manager <https://github.com/kytos-ng/flow_manager>`_
+- `kytos/topology <https://github.com/kytos-ng/topology>`_
 
-######
 Events
-######
+======
 
-Listen
-******
+Subscribed
+----------
 
-kytos/of_core.v0x0[14].messages.in.ofpt_packet_in
-=================================================
-Listen to any OpenFlow PacketIn in versions 1.0 (v0x01) or 1.3 (v0x04).
+- ``kytos/of_core.v0x0[14].messages.in.ofpt_packet_in``
+- ``kytos/topology.switch.enabled``
+- ``kytos/topology.switch.disabled``
 
-Content
--------
-
-.. code-block:: python3
-
-    { 'message': <object> # instance of python-openflow PacketIn message
-      'source': <object>, # instance of kytos.core.switch.Connection class
-    }
-
-kytos/topology.switch.enabled
-=============================
-Listen when a switch was enabled. This event is used to indicate when to
-install LLDP flows through kytos/flow_manager.
-
-Content
--------
-
-.. code-block:: python3
-
-   {
-     'dpid': <switch.id>
-   }
-
-kytos/topology.switch.disabled
-==============================
-Listen when a switch was disabled. This event is used to indicate when to
-remove LLDP flows through kytos/flow_manager.
-
-Content
--------
-
-.. code-block:: python3
-
-   {
-     'dpid': <switch.id>
-   }
-
-********
-Generate
-********
+Published
+---------
 
 kytos/of_lldp.messages.out.ofpt_packet_out
-==========================================
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 *buffer*: ``message_out``
 
 Standard "message out" event with a PacketOut message to the switch containing
 a LLDP packet inside it.
 
-Content
--------
+Content:
 
 .. code-block:: python3
 
@@ -131,7 +95,7 @@ Content
     }
 
 kytos/of_lldp.interface.is.nni
-==============================
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 *buffer*: ``app``
 
@@ -143,9 +107,7 @@ This event contains two attributes, `interface_a` and `interface_b`, and each
 one of them contains an attribute `switch` and another `port`, the first one
 contains the switch id and the second one the port number.
 
-Content
--------
-The content of an event will have the following format:
+Content:
 
 .. code-block:: python3
 
@@ -154,14 +116,6 @@ The content of an event will have the following format:
       'interface_b': <interface_b>
     }
 
-
-########
-Rest API
-########
-
-You can find a list of the available endpoints and example input/output in the
-'REST API' tab in this NApp's webpage in the `Kytos NApps Server
-<https://napps.kytos.io/kytos/of_lldp>`_.
 
 .. |License| image:: https://img.shields.io/github/license/kytos-ng/kytos.svg
    :target: https://github.com/kytos-ng/of_lldp/blob/master/LICENSE
@@ -174,3 +128,7 @@ You can find a list of the available endpoints and example input/output in the
 .. |Quality| image:: https://scrutinizer-ci.com/g/kytos-ng/of_lldp/badges/quality-score.png?b=master
   :alt: Code-quality score
   :target: https://scrutinizer-ci.com/g/kytos-ng/of_lldp/?branch=master
+.. |Stable| image:: https://img.shields.io/badge/stability-stable-green.svg
+   :target: https://github.com/kytos-ng/of_lldp
+.. |Tag| image:: https://img.shields.io/github/tag/kytos-ng/pathfinder.svg
+   :target: https://github.com/kytos-ng/of_lldp/tags

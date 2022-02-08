@@ -7,5 +7,5 @@
   "napp_dependencies": ["kytos/of_core", "kytos/flow_manager", "kytos/topology"],
   "license": "MIT",
   "url": "https://github.com/kytos/of_lldp.git",
-  "tags": ["openflow", "lldp", "work-in-progress"]
+  "tags": ["openflow", "lldp"]
 }
