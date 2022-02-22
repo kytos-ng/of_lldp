@@ -18,6 +18,7 @@ from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import listen_to
 from napps.kytos.of_lldp import constants, settings
+from napps.kytos.of_lldp.utils import get_cookie
 
 
 class Main(KytosNApp):
@@ -159,12 +160,13 @@ class Main(KytosNApp):
                                              status_codes, retries - 1, wait)
             log.info(f"Successfully forced {method} flows to {endpoint}")
 
-        flow = self._build_lldp_flow(of_version)
+        flow = self._build_lldp_flow(of_version, get_cookie(switch.dpid))
         if flow:
             destination = switch.id
             endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{destination}'
             data = {'flows': [flow]}
             if event.name == 'kytos/topology.switch.enabled':
+                flow.pop("cookie_mask")
                 res = requests.post(endpoint, json=data)
                 if res.status_code != 202:
                     log.error(f"Failed to push flows on {destination},"
@@ -365,7 +367,8 @@ class Main(KytosNApp):
 
         return packet_out
 
-    def _build_lldp_flow(self, version):
+    def _build_lldp_flow(self, version, cookie,
+                         cookie_mask=0xffffffffffffffff):
         """Build a Flow message to send LLDP to the controller.
 
         Args:
@@ -381,6 +384,8 @@ class Main(KytosNApp):
         match = {}
         flow['priority'] = settings.FLOW_PRIORITY
         flow['table_id'] = settings.TABLE_ID
+        flow['cookie'] = cookie
+        flow['cookie_mask'] = cookie_mask
         match['dl_type'] = EtherType.LLDP
         if self.vlan_id:
             match['dl_vlan'] = self.vlan_id

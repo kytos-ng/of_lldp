@@ -8,6 +8,9 @@ All notable changes to the of_lldp NApp will be documented in this file.
 Added
 =====
 
+- Loop detection feature in the same switch via LLDP ``ofpt_packet_in``
+- Added settings for loop detection
+
 Changed
 =======
 
@@ -24,16 +27,33 @@ Security
 ========
 
 
-[1.3.0] - 2022-01-07
+[2022.1.0] - 2022-02-02
+***********************
+
+Changed
+=======
+- New versioning schema, following kytos core versioning
+
+
+[1.3.1] - 2022-01-21
+********************
+
+Changed
+=======
+- Prefix changed to 0xab
+- Upgraded dependencies
+- Updated README referring Kytos NG
+
+
+[1.3.0] - 2021-12-20
 ********************
 
 Added
 =====
-
-- Added loop detection in the same switch via LLDP ``ofpt_packet_in``
-- Added settings for loop detection
+- Set ``cookie`` and ``cookie_mask`` when sending requests to ``flow_manager``
 
 
+>>>>>>> master
 [1.2.0] - 2021-12-13
 ********************
 Changed
