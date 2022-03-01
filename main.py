@@ -17,7 +17,7 @@ from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import listen_to
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.utils import get_cookie
-from napps.kytos.of_lldp.loop_manager import LoopManager
+from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
 
 
 class Main(KytosNApp):
@@ -107,6 +107,22 @@ class Main(KytosNApp):
                     ethernet.source, ethernet.destination,
                     switch.dpid, interface.port_number)
 
+        self.try_to_publish_stopped_loops()
+
+    def try_to_publish_stopped_loops(self):
+        """Try to publish current stopped loops."""
+        for dpid, port_pairs in self.loop_manager.get_stopped_loops().items():
+            try:
+                switch = self.controller.get_switch_by_dpid(dpid)
+                for port_pair in port_pairs:
+                    interface_a = switch.interfaces[port_pair[0]]
+                    interface_b = switch.interfaces[port_pair[1]]
+                    self.loop_manager.publish_loop_state(
+                        interface_a, interface_b, LoopState.stopped.value
+                    )
+            except (KeyError, AttributeError):
+                return None
+
     @listen_to('kytos/topology.switch.(enabled|disabled)')
     def handle_lldp_flows(self, event):
         """Install or remove flows in a switch.
@@ -124,15 +140,39 @@ class Main(KytosNApp):
 
     @listen_to("kytos/of_lldp.loop.action.log")
     def on_lldp_loop_log_action(self, event):
+        """Handle LLDP loop log action."""
         interface_a = event.content["interface_a"]
         interface_b = event.content["interface_b"]
         self.loop_manager.handle_log_action(interface_a, interface_b)
 
     @listen_to("kytos/of_lldp.loop.action.disable")
     def on_lldp_loop_disable_action(self, event):
+        """Handle LLDP loop disable action."""
         interface_a = event.content["interface_a"]
         interface_b = event.content["interface_b"]
         self.loop_manager.handle_disable_action(interface_a, interface_b)
+
+    @listen_to("kytos/of_lldp.loop.detected")
+    def on_lldp_loop_detected(self, event):
+        """Handle LLDP loop detected."""
+        interface_id = event.content["interface_id"]
+        dpid = event.content["dpid"]
+        port_pair = tuple(event.content["port_numbers"])
+        self.loop_manager.handle_loop_detected(interface_id, dpid, port_pair)
+
+    @listen_to("kytos/of_lldp.loop.stopped")
+    def on_lldp_loop_stopped(self, event):
+        """Handle LLDP loop stopped."""
+        dpid = event.content["dpid"]
+        port_pair = tuple(event.content["port_numbers"])
+        try:
+            switch = self.controller.get_switch_by_dpid(dpid)
+            interface_a = switch.interfaces[port_pair[0]]
+            interface_b = switch.interfaces[port_pair[1]]
+            self.loop_manager.handle_loop_stopped(interface_a, interface_b)
+        except (KeyError, AttributeError) as e:
+            log.error("on_lldp_loop_stopped failed with: "
+                      f"{event.content} {str(e)}")
 
     def _handle_lldp_flows(self, event):
         """Install or remove flows in a switch.

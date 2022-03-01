@@ -68,7 +68,7 @@ class LoopManager:
             )
         ):
             self.publish_loop_state(interface_a, interface_b, LoopState.detected.value)
-            self.publish_loop_action(interface_a, interface_b)
+            self.publish_loop_actions(interface_a, interface_b)
             return True
         return False
 
@@ -92,7 +92,7 @@ class LoopManager:
         )
         self.controller.buffers.app.put(event)
 
-    def publish_loop_action(
+    def publish_loop_actions(
         self,
         interface_a,
         interface_b,
