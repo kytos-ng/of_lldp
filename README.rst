@@ -117,6 +117,42 @@ Content:
     }
 
 
+kytos/of_lldp.loop.detected
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*buffer*: ``app``
+
+Event reporting that a loop has been detected.
+
+Content:
+
+.. code-block:: python3
+
+   {
+     'dpid': <str>,
+     'interface_id': <str>,
+     'port_numbers': [<int>, <int>],
+   }
+
+
+kytos.of_lldp/loop.stopped
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*buffer*: ``app``
+
+Event reporting that a loop has stopped.
+
+Content:
+
+.. code-block:: python3
+
+   {
+     'dpid': <str>,
+     'interface_id': <str>,
+     'port_numbers': [<int>, <int>],
+   }
+
+
 .. |License| image:: https://img.shields.io/github/license/kytos-ng/kytos.svg
    :target: https://github.com/kytos-ng/of_lldp/blob/master/LICENSE
 .. |Build| image:: https://scrutinizer-ci.com/g/kytos-ng/of_lldp/badges/build.png?b=master
