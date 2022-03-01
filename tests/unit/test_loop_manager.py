@@ -84,6 +84,9 @@ class TestLoopManager(TestCase):
         intf_a = get_interface_mock("s1-eth1", 1, switch)
         intf_b = get_interface_mock("s1-eth2", 2, switch)
 
+        response = MagicMock()
+        response.status_code = 200
+        mock_requests.post.return_value = response
         self.loop_manager.handle_disable_action(intf_a, intf_b)
         assert mock_requests.post.call_count == 1
         assert mock_log.info.call_count == 1
@@ -99,6 +102,9 @@ class TestLoopManager(TestCase):
         intf_b = get_interface_mock("s1-eth2", 2, switch)
 
         self.loop_manager.loop_state[dpid][(1, 2)] = {"state": "detected"}
+        response = MagicMock()
+        response.status_code = 200
+        mock_requests.post.return_value = response
         self.loop_manager.handle_loop_stopped(intf_a, intf_b)
         assert mock_requests.delete.call_count == 1
         assert "log" in self.loop_manager.actions
@@ -162,13 +168,13 @@ class TestLoopManager(TestCase):
         self.loop_manager.publish_loop_state(intf_a, intf_b, state)
         assert self.loop_manager.controller.buffers.app.put.call_count == 1
 
-    def test_publish_loop_action(self):
-        """Test publish_loop_action."""
+    def test_publish_loop_actions(self):
+        """Test publish_loop_actions."""
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock(dpid, 0x04)
         intf_a = get_interface_mock("s1-eth1", 1, switch)
         intf_b = get_interface_mock("s1-eth2", 2, switch)
-        self.loop_manager.publish_loop_action(intf_a, intf_b)
+        self.loop_manager.publish_loop_actions(intf_a, intf_b)
         assert self.loop_manager.controller.buffers.app.put.call_count == len(
             set(self.loop_manager.actions)
         )
@@ -185,3 +191,16 @@ class TestLoopManager(TestCase):
         for port_pair in port_pairs:
             self.loop_manager.loop_state[dpid][port_pair] = looped_entry
         assert self.loop_manager.get_stopped_loops() == {dpid: port_pairs}
+
+    @patch("napps.kytos.of_lldp.loop_manager.LoopManager.publish_loop_state")
+    @patch("napps.kytos.of_lldp.loop_manager.LoopManager.publish_loop_actions")
+    def test_process_if_looped(self, mock_publish_actions, mock_publish_state):
+        """Test process_if_looped."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        intf_a = get_interface_mock("s1-eth1", 1, switch)
+        intf_b = get_interface_mock("s1-eth2", 2, switch)
+        self.loop_manager.ignored_loops = {}
+        assert self.loop_manager.process_if_looped(intf_a, intf_b)
+        assert mock_publish_actions.call_count == 1
+        assert mock_publish_state.call_count == 1

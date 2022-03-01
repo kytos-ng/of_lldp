@@ -100,7 +100,7 @@ class TestMain(TestCase):
         self.napp._handle_lldp_flows(event_post)
         self.assertTrue(mock_post.call_count, 3)
 
-    @patch('napps.kytos.of_lldp.main.Main.process_if_lldp_looped')
+    @patch('napps.kytos.of_lldp.loop_manager.LoopManager.process_if_looped')
     @patch('kytos.core.buffers.KytosEventBuffer.put')
     @patch('napps.kytos.of_lldp.main.KytosEvent')
     @patch('kytos.core.controller.Controller.get_switch_by_dpid')
@@ -152,57 +152,6 @@ class TestMain(TestCase):
         mock_unpack_non_empty.assert_has_calls(calls)
         mock_buffer_put.assert_called_with('nni')
         mock_process_looped.assert_called()
-
-    def test_is_lldp_looped(self):
-        """Test is_lldp_looped cases."""
-
-        dpid_a = "00:00:00:00:00:00:00:01"
-        dpid_b = "00:00:00:00:00:00:00:02"
-        values = [
-            (dpid_a, 6, dpid_a, 7, True),
-            (dpid_a, 1, dpid_a, 2, True),
-            (dpid_a, 7, dpid_a, 7, True),
-            (dpid_a, 8, dpid_a, 1, False),  # port_a > port_b
-            (dpid_a, 1, dpid_b, 2, False),
-            (dpid_a, 2, dpid_b, 1, False),
-        ]
-        for dpid_a, port_a, dpid_b, port_b, looped in values:
-            with self.subTest(dpid_a=dpid_a, port_a=port_a, port_b=port_b,
-                              looped=looped):
-                assert (
-                    self.napp._is_lldp_looped(dpid_a, port_a, dpid_b, port_b)
-                    == looped
-                )
-
-    def test_is_loop_ignored(self):
-        """Test is_loop_ignored."""
-
-        dpid = "00:00:00:00:00:00:00:01"
-        port_a = 1
-        port_b = 2
-        self.napp.ignored_loops[dpid] = {(port_a, port_b)}
-
-        assert self.napp._is_loop_ignored(dpid, port_a=port_a, port_b=port_b)
-        assert self.napp._is_loop_ignored(dpid, port_a=port_b, port_b=port_a)
-
-        assert not self.napp._is_loop_ignored(dpid, port_a + 20, port_b)
-
-        dpid = "00:00:00:00:00:00:00:02"
-        assert not self.napp._is_loop_ignored(dpid, port_a, port_b)
-
-    @patch('napps.kytos.of_lldp.main.log')
-    def test_lldp_loop_handler_log_actio(self, mock_log):
-        """Test lldp_loop_handler log action."""
-
-        switch = MagicMock()
-        dpid = "00:00:00:00:00:00:00:01"
-        switch.id = dpid
-        intf_a = MagicMock()
-        intf_a.port_number = 1
-        intf_b = MagicMock()
-        intf_b.port_number = 2
-        self.napp.lldp_loop_handler(switch, intf_a, intf_b, action="log")
-        mock_log.warning.assert_called()
 
     @patch('napps.kytos.of_lldp.main.PO13')
     @patch('napps.kytos.of_lldp.main.PO10')
