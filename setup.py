@@ -21,6 +21,7 @@ if 'bdist_wheel' in sys.argv:
 # Paths setup with virtualenv detection
 BASE_ENV = Path(os.environ.get('VIRTUAL_ENV', '/'))
 
+NAPP_NAME = 'of_lldp'
 NAPP_VERSION = '2022.1.0'
 
 # Kytos var folder
