@@ -33,7 +33,7 @@ class LoopManager:
         self.stopped_interval = 3 * settings.POLLING_TIME
         self.log_every = settings.LOOP_LOG_EVERY
 
-    def _is_loop_ignored(self, dpid, port_a, port_b):
+    def is_loop_ignored(self, dpid, port_a, port_b):
         """Check if a loop is ignored."""
         if dpid not in self.ignored_loops:
             return False
@@ -47,7 +47,7 @@ class LoopManager:
         return False
 
     @staticmethod
-    def _is_looped(dpid_a, port_a, dpid_b, port_b):
+    def is_looped(dpid_a, port_a, dpid_b, port_b):
         """Check if the given dpids and ports are looped."""
         if all((dpid_a == dpid_b, port_a <= port_b)):  # only enter one pair
             return True
@@ -65,8 +65,8 @@ class LoopManager:
         port_b = interface_b.port_number
         if all(
             (
-                self._is_looped(dpid_a, port_a, dpid_b, port_b),
-                not self._is_loop_ignored(dpid_a, port_a, port_b),
+                self.is_looped(dpid_a, port_a, dpid_b, port_b),
+                not self.is_loop_ignored(dpid_a, port_a, port_b),
             )
         ):
             self.publish_loop_state(
@@ -153,14 +153,12 @@ class LoopManager:
                     "detected_at": detected_at,
                 }
             }
-
             response = self.add_interface_metadata(interface_id, metadata)
             if response.status_code != 201:
                 log.error(
                     f"Failed to add metadata {metadata} on interface "
                     f"{interface_id}, response: {response.json()}"
                 )
-                return
 
     def has_loop_stopped(self, dpid, port_pair):
         """Check if a loop has stopped by checking within an interval
@@ -241,7 +239,6 @@ class LoopManager:
                 f"Failed to delete metadata key {key} on interface ",
                 f"{interface_a.id}",
             )
-            return
 
     def handle_log_action(
         self,

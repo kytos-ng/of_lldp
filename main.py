@@ -120,7 +120,10 @@ class Main(KytosNApp):
                     self.loop_manager.publish_loop_state(
                         interface_a, interface_b, LoopState.stopped.value
                     )
-            except (KeyError, AttributeError):
+            except (KeyError, AttributeError) as exc:
+                items = self.loop_manager.get_stopped_loops()
+                log.error(f"try_to_publish_stopped_loops failed with: {items} "
+                          f"{str(exc)}")
                 return None
 
     @listen_to('kytos/topology.switch.(enabled|disabled)')

@@ -9,7 +9,6 @@ from kytos.core.helpers import now
 from napps.kytos.of_lldp.loop_manager import LoopManager
 
 
-# pylint: disable=protected-access
 class TestLoopManager(TestCase):
     """Tests for LoopManager."""
 
@@ -19,7 +18,7 @@ class TestLoopManager(TestCase):
         self.loop_manager = LoopManager(controller)
 
     def test_is_looped(self):
-        """Test _is_looped cases."""
+        """Test is_looped cases."""
 
         dpid_a = "00:00:00:00:00:00:00:01"
         dpid_b = "00:00:00:00:00:00:00:02"
@@ -36,7 +35,7 @@ class TestLoopManager(TestCase):
                 dpid_a=dpid_a, port_a=port_a, port_b=port_b, looped=looped
             ):
                 assert (
-                    self.loop_manager._is_looped(
+                    self.loop_manager.is_looped(
                         dpid_a, port_a, dpid_b, port_b
                     )
                     == looped
@@ -50,19 +49,19 @@ class TestLoopManager(TestCase):
         port_b = 2
         self.loop_manager.ignored_loops[dpid] = [[port_a, port_b]]
 
-        assert self.loop_manager._is_loop_ignored(
+        assert self.loop_manager.is_loop_ignored(
             dpid, port_a=port_a, port_b=port_b
         )
-        assert self.loop_manager._is_loop_ignored(
+        assert self.loop_manager.is_loop_ignored(
             dpid, port_a=port_b, port_b=port_a
         )
 
-        assert not self.loop_manager._is_loop_ignored(
+        assert not self.loop_manager.is_loop_ignored(
             dpid, port_a + 20, port_b
         )
 
         dpid = "00:00:00:00:00:00:00:02"
-        assert not self.loop_manager._is_loop_ignored(dpid, port_a, port_b)
+        assert not self.loop_manager.is_loop_ignored(dpid, port_a, port_b)
 
     @patch("napps.kytos.of_lldp.loop_manager.log")
     def test_handle_log_action(self, mock_log):
