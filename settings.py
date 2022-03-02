@@ -8,8 +8,8 @@ FLOW_MANAGER_URL = 'http://localhost:8181/api/kytos/flow_manager/v2'
 TOPOLOGY_URL = 'http://localhost:8181/api/kytos/topology/v3'
 
 LLDP_LOOP_ACTIONS = ["log"]  # supported actions ["log", "disable"]
-LLDP_IGNORED_LOOPS = {}  # ignored loops per dpid {"dpid": {(1, 2)}}
-LOOP_LOG_EVERY = max(60 / max(POLLING_TIME, 1), 1)  # every minute by default
+LLDP_IGNORED_LOOPS = {}  # ignored loops per dpid {"dpid": [[1, 2]]}
+LOOP_LOG_EVERY = int(max(60 / max(POLLING_TIME, 1), 1))  # every min by default
 
 # Prefix this NApp has when using cookies
 COOKIE_PREFIX = 0xab
