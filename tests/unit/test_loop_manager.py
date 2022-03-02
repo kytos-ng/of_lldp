@@ -1,17 +1,15 @@
 """Test LoopManager methods."""
+from datetime import timedelta
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
-from datetime import timedelta
+
+from kytos.lib.helpers import get_interface_mock, get_switch_mock
 
 from kytos.core.helpers import now
-from kytos.lib.helpers import (
-    get_switch_mock,
-    get_interface_mock,
-)
-
 from napps.kytos.of_lldp.loop_manager import LoopManager
 
 
+# pylint: disable=protected-access
 class TestLoopManager(TestCase):
     """Tests for LoopManager."""
 
@@ -38,7 +36,9 @@ class TestLoopManager(TestCase):
                 dpid_a=dpid_a, port_a=port_a, port_b=port_b, looped=looped
             ):
                 assert (
-                    self.loop_manager._is_looped(dpid_a, port_a, dpid_b, port_b)
+                    self.loop_manager._is_looped(
+                        dpid_a, port_a, dpid_b, port_b
+                    )
                     == looped
                 )
 
@@ -48,12 +48,18 @@ class TestLoopManager(TestCase):
         dpid = "00:00:00:00:00:00:00:01"
         port_a = 1
         port_b = 2
-        self.loop_manager.ignored_loops[dpid] = {(port_a, port_b)}
+        self.loop_manager.ignored_loops[dpid] = [[port_a, port_b]]
 
-        assert self.loop_manager._is_loop_ignored(dpid, port_a=port_a, port_b=port_b)
-        assert self.loop_manager._is_loop_ignored(dpid, port_a=port_b, port_b=port_a)
+        assert self.loop_manager._is_loop_ignored(
+            dpid, port_a=port_a, port_b=port_b
+        )
+        assert self.loop_manager._is_loop_ignored(
+            dpid, port_a=port_b, port_b=port_a
+        )
 
-        assert not self.loop_manager._is_loop_ignored(dpid, port_a + 20, port_b)
+        assert not self.loop_manager._is_loop_ignored(
+            dpid, port_a + 20, port_b
+        )
 
         dpid = "00:00:00:00:00:00:00:02"
         assert not self.loop_manager._is_loop_ignored(dpid, port_a, port_b)
@@ -111,7 +117,9 @@ class TestLoopManager(TestCase):
         assert mock_log.info.call_count == 1
         assert self.loop_manager.loop_state[dpid][(1, 2)]["state"] == "stopped"
 
-    @patch("napps.kytos.of_lldp.loop_manager.LoopManager.add_interface_metadata")
+    @patch(
+        "napps.kytos.of_lldp.loop_manager.LoopManager.add_interface_metadata"
+    )
     def test_handle_loop_detected(self, mock_add_interface_metadata):
         """Test handle_loop_detected."""
 
@@ -121,7 +129,10 @@ class TestLoopManager(TestCase):
 
         port_pair = (1, 2)
         self.loop_manager.handle_loop_detected(intf_a.id, dpid, port_pair)
-        assert self.loop_manager.loop_state[dpid][port_pair]["state"] == "detected"
+        assert (
+            self.loop_manager.loop_state[dpid][port_pair]["state"]
+            == "detected"
+        )
         assert mock_add_interface_metadata.call_count == 1
 
         # aditional call while is still active it shouldn't add metadata again
@@ -184,9 +195,10 @@ class TestLoopManager(TestCase):
         dpid = "00:00:00:00:00:00:00:01"
         port_pairs = [(1, 2), (3, 3)]
 
+        delta = now() - timedelta(minutes=1)
         looped_entry = {
             "state": "detected",
-            "updated_at": (now() - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S"),
+            "updated_at": delta.strftime("%Y-%m-%dT%H:%M:%S"),
         }
         for port_pair in port_pairs:
             self.loop_manager.loop_state[dpid][port_pair] = looped_entry
@@ -204,3 +216,37 @@ class TestLoopManager(TestCase):
         assert self.loop_manager.process_if_looped(intf_a, intf_b)
         assert mock_publish_actions.call_count == 1
         assert mock_publish_state.call_count == 1
+
+    def test_handle_topology_update(self):
+        """Test handle_topology pudate."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        mock_topo = MagicMock()
+        switch.metadata = {"ignored_loops": [[1, 2]]}
+        mock_topo.switches = {dpid: switch}
+
+        assert dpid not in self.loop_manager.ignored_loops
+        self.loop_manager.handle_topology_loaded(mock_topo)
+        assert self.loop_manager.ignored_loops[dpid] == [[1, 2]]
+
+    def test_handle_switch_metadata_changed_added(self):
+        """Test handle_switch_metadata_changed added."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        switch.metadata = {"ignored_loops": [[1, 2]]}
+
+        assert dpid not in self.loop_manager.ignored_loops
+        self.loop_manager.handle_switch_metadata_changed(switch)
+        assert self.loop_manager.ignored_loops[dpid] == [[1, 2]]
+
+    def test_handle_switch_metadata_changed_removed(self):
+        """Test handle_switch_metadata_changed removed."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        switch.id = dpid
+        switch.metadata = {"some_key": "some_value"}
+        self.loop_manager.ignored_loops[dpid] = [[1, 2]]
+
+        assert dpid in self.loop_manager.ignored_loops
+        self.loop_manager.handle_switch_metadata_changed(switch)
+        assert dpid not in self.loop_manager.ignored_loops

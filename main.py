@@ -16,8 +16,8 @@ from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import listen_to
 from napps.kytos.of_lldp import constants, settings
-from napps.kytos.of_lldp.utils import get_cookie
 from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
+from napps.kytos.of_lldp.utils import get_cookie
 
 
 class Main(KytosNApp):
@@ -157,22 +157,34 @@ class Main(KytosNApp):
         """Handle LLDP loop detected."""
         interface_id = event.content["interface_id"]
         dpid = event.content["dpid"]
-        port_pair = tuple(event.content["port_numbers"])
+        port_pair = event.content["port_numbers"]
         self.loop_manager.handle_loop_detected(interface_id, dpid, port_pair)
 
     @listen_to("kytos/of_lldp.loop.stopped")
     def on_lldp_loop_stopped(self, event):
         """Handle LLDP loop stopped."""
         dpid = event.content["dpid"]
-        port_pair = tuple(event.content["port_numbers"])
+        port_pair = event.content["port_numbers"]
         try:
             switch = self.controller.get_switch_by_dpid(dpid)
             interface_a = switch.interfaces[port_pair[0]]
             interface_b = switch.interfaces[port_pair[1]]
             self.loop_manager.handle_loop_stopped(interface_a, interface_b)
-        except (KeyError, AttributeError) as e:
+        except (KeyError, AttributeError) as exc:
             log.error("on_lldp_loop_stopped failed with: "
-                      f"{event.content} {str(e)}")
+                      f"{event.content} {str(exc)}")
+
+    @listen_to("kytos/topology.topology_loaded")
+    def on_topology_loaded(self, event):
+        """Handle on topology loaded."""
+        topology = event.content["topology"]
+        self.loop_manager.handle_topology_loaded(topology)
+
+    @listen_to("kytos/topology.switches.metadata.(added|removed)")
+    def on_switches_metadata_changed(self, event):
+        """Handle on switches metadata changed."""
+        switch = event.content["switch"]
+        self.loop_manager.handle_switch_metadata_changed(switch)
 
     def _handle_lldp_flows(self, event):
         """Install or remove flows in a switch.

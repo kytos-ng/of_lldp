@@ -1,16 +1,18 @@
+"""LoopManager."""
 from collections import defaultdict
+from enum import Enum
 from threading import Lock
 
 import requests
 
 from kytos.core import KytosEvent, log
-from kytos.core.helpers import now, get_time
-from enum import Enum
-
-from napps.kytos.of_lldp import settings
+from kytos.core.helpers import get_time, now
+from napps.kytos.of_lldp import settings as napp_settings
 
 
 class LoopState(str, Enum):
+    """LoopState Enum."""
+
     detected = "detected"
     stopped = "stopped"
 
@@ -18,7 +20,7 @@ class LoopState(str, Enum):
 class LoopManager:
     """LoopManager."""
 
-    def __init__(self, controller, settings=settings):
+    def __init__(self, controller, settings=napp_settings):
         """Constructor of LoopDetection."""
         self.controller = controller
         self.loop_lock = Lock()
@@ -37,8 +39,8 @@ class LoopManager:
             return False
         if any(
             (
-                (port_a, port_b) in self.ignored_loops[dpid],
-                (port_b, port_a) in self.ignored_loops[dpid],
+                [port_a, port_b] in self.ignored_loops[dpid],
+                [port_b, port_a] in self.ignored_loops[dpid],
             )
         ):
             return True
@@ -67,7 +69,9 @@ class LoopManager:
                 not self._is_loop_ignored(dpid_a, port_a, port_b),
             )
         ):
-            self.publish_loop_state(interface_a, interface_b, LoopState.detected.value)
+            self.publish_loop_state(
+                interface_a, interface_b, LoopState.detected.value
+            )
             self.publish_loop_actions(interface_a, interface_b)
             return True
         return False
@@ -102,28 +106,37 @@ class LoopManager:
         for action in set(self.actions).intersection(supported_actions):
             event = KytosEvent(
                 name=f"kytos/of_lldp.loop.action.{action}",
-                content={"interface_a": interface_a, "interface_b": interface_b},
+                content={
+                    "interface_a": interface_a,
+                    "interface_b": interface_b,
+                },
             )
             self.controller.buffers.app.put(event)
 
     def handle_loop_detected(self, interface_id, dpid, port_pair):
         """Handle loop detected."""
         is_new_loop = False
+        port_pair = tuple(port_pair)
         with self.loop_lock:
             if port_pair not in self.loop_state[dpid]:
+                dt_at = now().strftime("%Y-%m-%dT%H:%M:%S")
                 data = {
                     "state": LoopState.detected.value,
                     "port_numbers": list(port_pair),
-                    "updated_at": now().strftime("%Y-%m-%dT%H:%M:%S"),
-                    "detected_at": now().strftime("%Y-%m-%dT%H:%M:%S"),
+                    "updated_at": dt_at,
+                    "detected_at": dt_at,
                 }
                 self.loop_state[dpid][port_pair] = data
                 is_new_loop = True
-            if self.loop_state[dpid][port_pair]["state"] != LoopState.detected.value:
+            if (
+                self.loop_state[dpid][port_pair]["state"]
+                != LoopState.detected.value
+            ):
+                dt_at = now().strftime("%Y-%m-%dT%H:%M:%S")
                 data = {
                     "state": LoopState.detected.value,
-                    "updated_at": now().strftime("%Y-%m-%dT%H:%M:%S"),
-                    "detected_at": now().strftime("%Y-%m-%dT%H:%M:%S"),
+                    "updated_at": dt_at,
+                    "detected_at": dt_at,
                 }
                 self.loop_state[dpid][port_pair].update(data)
                 self.loop_state[dpid][port_pair].pop("stopped_at", None)
@@ -132,10 +145,12 @@ class LoopManager:
                 data = {"updated_at": now().strftime("%Y-%m-%dT%H:%M:%S")}
                 self.loop_state[dpid][port_pair].update(data)
         if is_new_loop:
+            port_numbers = self.loop_state[dpid][port_pair]["port_numbers"]
+            detected_at = self.loop_state[dpid][port_pair]["detected_at"]
             metadata = {
                 "looped": {
-                    "port_numbers": self.loop_state[dpid][port_pair]["port_numbers"],
-                    "detected_at": self.loop_state[dpid][port_pair]["detected_at"],
+                    "port_numbers": port_numbers,
+                    "detected_at": detected_at,
                 }
             }
 
@@ -204,9 +219,11 @@ class LoopManager:
         if port_pair not in self.loop_state[dpid]:
             return
         with self.loop_lock:
+            dt_at = now().strftime("%Y-%m-%dT%H:%M:%S")
             data = {
                 "state": "stopped",
-                "stopped_at": now().strftime("%Y-%m-%dT%H:%M:%S"),
+                "updated_at": dt_at,
+                "stopped_at": dt_at,
             }
             self.loop_state[dpid][port_pair].update(data)
 
@@ -222,7 +239,7 @@ class LoopManager:
         if response.status_code != 200:
             log.error(
                 f"Failed to delete metadata key {key} on interface ",
-                f"{interface_a.id}"
+                f"{interface_a.id}",
             )
             return
 
@@ -257,7 +274,7 @@ class LoopManager:
         self,
         interface_a,
         interface_b,
-    ) -> None:
+    ):
         """Execute LLDP loop disable action idempotently."""
         if not interface_a.is_enabled():
             return
@@ -265,7 +282,8 @@ class LoopManager:
         port_a = interface_a.port_number
         port_b = interface_b.port_number
         intf_id = interface_a.id
-        endpoint = f"{settings.TOPOLOGY_URL}/interfaces/{intf_id}/disable"
+        base_url = self.settings.TOPOLOGY_URL
+        endpoint = f"{base_url}/interfaces/{intf_id}/disable"
         response = requests.post(endpoint)
         if response.status_code != 200:
             log.error(
@@ -279,3 +297,30 @@ class LoopManager:
             f"looped interfaces: {[interface_a.name, interface_b.name]}, "
             f"port_numbers: {[port_a, port_b]}"
         )
+
+    def handle_switch_metadata_changed(self, switch):
+        """Handle switch metadata changed."""
+        if switch.id not in self.ignored_loops:
+            self.try_to_load_ignored_switch(switch)
+        else:
+            with self.loop_lock:
+                self.ignored_loops.pop(switch.dpid, None)
+
+    def try_to_load_ignored_switch(self, switch):
+        """Try to load an ignored switch."""
+        if "ignored_loops" not in switch.metadata:
+            return
+        if not isinstance(switch.metadata["ignored_loops"], list):
+            return
+
+        dpid = switch.dpid
+        with self.loop_lock:
+            self.ignored_loops[dpid] = []
+            for port_pair in switch.metadata["ignored_loops"]:
+                if isinstance(port_pair, list):
+                    self.ignored_loops[dpid].append(port_pair)
+
+    def handle_topology_loaded(self, topology):
+        """Handle on topology loaded."""
+        for switch in topology.switches.values():
+            self.try_to_load_ignored_switch(switch)
