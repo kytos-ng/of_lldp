@@ -231,6 +231,22 @@ class LoopManager:
                 f"interfaces: {[interface_a.name, interface_b.name]}, "
                 f"port_numbers: {[port_a, port_b]}"
             )
+        if "disable" in self.actions:
+            base_url = self.settings.TOPOLOGY_URL
+            endpoint = f"{base_url}/interfaces/{interface_a.id}/enable"
+            response = requests.post(endpoint)
+            if response.status_code != 200:
+                log.error(
+                    f"Failed to enable interface: {interface_a.id},"
+                    f" status code: {response.status_code}"
+                )
+            else:
+                log.info(
+                    "LLDP loop detection enabled interface "
+                    f"{interface_a.name}, looped interfaces: "
+                    f"{[interface_a.name, interface_b.name]},"
+                    f"port_numbers: {[port_a, port_b]}"
+                )
 
         key = "looped"
         response = self.del_interface_metadata(interface_a.id, key)

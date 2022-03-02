@@ -107,13 +107,16 @@ class TestLoopManager(TestCase):
         intf_b = get_interface_mock("s1-eth2", 2, switch)
 
         self.loop_manager.loop_state[dpid][(1, 2)] = {"state": "detected"}
+        self.loop_manager.actions = ["log", "disable"]
         response = MagicMock()
         response.status_code = 200
         mock_requests.post.return_value = response
         self.loop_manager.handle_loop_stopped(intf_a, intf_b)
         assert mock_requests.delete.call_count == 1
+        assert mock_requests.post.call_count == 1
         assert "log" in self.loop_manager.actions
-        assert mock_log.info.call_count == 1
+        assert "disable" in self.loop_manager.actions
+        assert mock_log.info.call_count == 2
         assert self.loop_manager.loop_state[dpid][(1, 2)]["state"] == "stopped"
 
     @patch(
