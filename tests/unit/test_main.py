@@ -56,12 +56,15 @@ class TestMain(TestCase):
         mock_ethernet.return_value = ethernet
         mock_kytos_event.side_effect = po_args
 
+        mock_publish_stopped = MagicMock()
+        self.napp.try_to_publish_stopped_loops = mock_publish_stopped
         self.napp.execute()
 
         mock_build_lldp_packet_out.assert_has_calls([call(*(arg))
                                                      for arg in po_args])
         mock_buffer_put.assert_has_calls([call(arg)
                                           for arg in po_args])
+        mock_publish_stopped.assert_called()
 
     @patch('requests.delete')
     @patch('requests.post')
