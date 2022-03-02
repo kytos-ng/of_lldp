@@ -53,7 +53,6 @@ Added
 - Set ``cookie`` and ``cookie_mask`` when sending requests to ``flow_manager``
 
 
->>>>>>> master
 [1.2.0] - 2021-12-13
 ********************
 Changed
