@@ -8,7 +8,7 @@ All notable changes to the of_lldp NApp will be documented in this file.
 Added
 =====
 
-- Loop detection feature in the same switch via LLDP ``ofpt_packet_in``
+- Loop detection in the same switch via LLDP ``ofpt_packet_in`` supporting ``log`` and ``disable`` actions
 - Added settings for loop detection
 
 Changed
