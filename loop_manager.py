@@ -243,7 +243,7 @@ class LoopManager:
             else:
                 log.info(
                     "LLDP loop detection enabled interface "
-                    f"{interface_a.name}, looped interfaces: "
+                    f"{interface_a.id}, looped interfaces: "
                     f"{[interface_a.name, interface_b.name]},"
                     f"port_numbers: {[port_a, port_b]}"
                 )
@@ -306,7 +306,7 @@ class LoopManager:
             return
 
         log.info(
-            f"LLDP loop detection disabled interface {interface_a.name}, "
+            f"LLDP loop detection disabled interface {interface_a.id}, "
             f"looped interfaces: {[interface_a.name, interface_b.name]}, "
             f"port_numbers: {[port_a, port_b]}"
         )
