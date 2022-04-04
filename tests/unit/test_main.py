@@ -9,7 +9,7 @@ from napps.kytos.of_lldp.utils import get_cookie
 from tests.helpers import get_topology_mock
 
 
-# pylint: disable=protected-access
+# pylint: disable=protected-access,too-many-public-methods
 class TestMain(TestCase):
     """Tests for the Main class."""
 
@@ -56,12 +56,15 @@ class TestMain(TestCase):
         mock_ethernet.return_value = ethernet
         mock_kytos_event.side_effect = po_args
 
+        mock_publish_stopped = MagicMock()
+        self.napp.try_to_publish_stopped_loops = mock_publish_stopped
         self.napp.execute()
 
         mock_build_lldp_packet_out.assert_has_calls([call(*(arg))
                                                      for arg in po_args])
         mock_buffer_put.assert_has_calls([call(arg)
                                           for arg in po_args])
+        mock_publish_stopped.assert_called()
 
     @patch('requests.delete')
     @patch('requests.post')
@@ -100,6 +103,7 @@ class TestMain(TestCase):
         self.napp._handle_lldp_flows(event_post)
         self.assertTrue(mock_post.call_count, 3)
 
+    @patch('napps.kytos.of_lldp.loop_manager.LoopManager.process_if_looped')
     @patch('kytos.core.buffers.KytosEventBuffer.put')
     @patch('napps.kytos.of_lldp.main.KytosEvent')
     @patch('kytos.core.controller.Controller.get_switch_by_dpid')
@@ -112,7 +116,7 @@ class TestMain(TestCase):
         """Test notify_uplink_detected method."""
         (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
          mock_unpack_non_empty, mock_get_switch_by_dpid, mock_kytos_event,
-         mock_buffer_put) = args
+         mock_buffer_put, mock_process_looped) = args
 
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         message = MagicMock()
@@ -123,6 +127,9 @@ class TestMain(TestCase):
                                      content={'source': switch.connection,
                                               'message': message})
 
+        mocked = MagicMock()
+        mocked.value = 1
+        mock_ubint32.return_value = mocked
         ethernet = MagicMock()
         ethernet.ether_type = 0x88CC
         ethernet.data = 'eth_data'
@@ -132,6 +139,7 @@ class TestMain(TestCase):
         dpid = MagicMock()
         dpid.value = "00:00:00:00:00:00:00:02"
         port_b = MagicMock()
+        port_b.value = 2
 
         mock_unpack_non_empty.side_effect = [ethernet, lldp, dpid, port_b]
         mock_get_switch_by_dpid.return_value = get_switch_mock(dpid.value,
@@ -146,6 +154,7 @@ class TestMain(TestCase):
                  call(mock_ubint32, lldp.port_id.sub_value)]
         mock_unpack_non_empty.assert_has_calls(calls)
         mock_buffer_put.assert_called_with('nni')
+        mock_process_looped.assert_called()
 
     @patch('napps.kytos.of_lldp.main.PO13')
     @patch('napps.kytos.of_lldp.main.PO10')

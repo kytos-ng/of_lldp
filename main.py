@@ -16,6 +16,7 @@ from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import listen_to
 from napps.kytos.of_lldp import constants, settings
+from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
 from napps.kytos.of_lldp.utils import get_cookie
 
 
@@ -29,6 +30,7 @@ class Main(KytosNApp):
         if hasattr(settings, "FLOW_VLAN_VID"):
             self.vlan_id = settings.FLOW_VLAN_VID
         self.execute_as_loop(self.polling_time)
+        self.loop_manager = LoopManager(self.controller)
 
     def execute(self):
         """Send LLDP Packets every 'POLLING_TIME' seconds to all switches."""
@@ -105,6 +107,25 @@ class Main(KytosNApp):
                     ethernet.source, ethernet.destination,
                     switch.dpid, interface.port_number)
 
+        self.try_to_publish_stopped_loops()
+
+    def try_to_publish_stopped_loops(self):
+        """Try to publish current stopped loops."""
+        for dpid, port_pairs in self.loop_manager.get_stopped_loops().items():
+            try:
+                switch = self.controller.get_switch_by_dpid(dpid)
+                for port_pair in port_pairs:
+                    interface_a = switch.interfaces[port_pair[0]]
+                    interface_b = switch.interfaces[port_pair[1]]
+                    self.loop_manager.publish_loop_state(
+                        interface_a, interface_b, LoopState.stopped.value
+                    )
+            except (KeyError, AttributeError) as exc:
+                items = self.loop_manager.get_stopped_loops()
+                log.error(f"try_to_publish_stopped_loops failed with: {items} "
+                          f"{str(exc)}")
+                return None
+
     @listen_to('kytos/topology.switch.(enabled|disabled)')
     def handle_lldp_flows(self, event):
         """Install or remove flows in a switch.
@@ -119,6 +140,54 @@ class Main(KytosNApp):
 
         """
         self._handle_lldp_flows(event)
+
+    @listen_to("kytos/of_lldp.loop.action.log")
+    def on_lldp_loop_log_action(self, event):
+        """Handle LLDP loop log action."""
+        interface_a = event.content["interface_a"]
+        interface_b = event.content["interface_b"]
+        self.loop_manager.handle_log_action(interface_a, interface_b)
+
+    @listen_to("kytos/of_lldp.loop.action.disable")
+    def on_lldp_loop_disable_action(self, event):
+        """Handle LLDP loop disable action."""
+        interface_a = event.content["interface_a"]
+        interface_b = event.content["interface_b"]
+        self.loop_manager.handle_disable_action(interface_a, interface_b)
+
+    @listen_to("kytos/of_lldp.loop.detected")
+    def on_lldp_loop_detected(self, event):
+        """Handle LLDP loop detected."""
+        interface_id = event.content["interface_id"]
+        dpid = event.content["dpid"]
+        port_pair = event.content["port_numbers"]
+        self.loop_manager.handle_loop_detected(interface_id, dpid, port_pair)
+
+    @listen_to("kytos/of_lldp.loop.stopped")
+    def on_lldp_loop_stopped(self, event):
+        """Handle LLDP loop stopped."""
+        dpid = event.content["dpid"]
+        port_pair = event.content["port_numbers"]
+        try:
+            switch = self.controller.get_switch_by_dpid(dpid)
+            interface_a = switch.interfaces[port_pair[0]]
+            interface_b = switch.interfaces[port_pair[1]]
+            self.loop_manager.handle_loop_stopped(interface_a, interface_b)
+        except (KeyError, AttributeError) as exc:
+            log.error("on_lldp_loop_stopped failed with: "
+                      f"{event.content} {str(exc)}")
+
+    @listen_to("kytos/topology.topology_loaded")
+    def on_topology_loaded(self, event):
+        """Handle on topology loaded."""
+        topology = event.content["topology"]
+        self.loop_manager.handle_topology_loaded(topology)
+
+    @listen_to("kytos/topology.switches.metadata.(added|removed)")
+    def on_switches_metadata_changed(self, event):
+        """Handle on switches metadata changed."""
+        switch = event.content["switch"]
+        self.loop_manager.handle_switch_metadata_changed(switch)
 
     def _handle_lldp_flows(self, event):
         """Install or remove flows in a switch.
@@ -177,6 +246,16 @@ class Main(KytosNApp):
                 _retry_if_status_code(res, endpoint, data, [424, 500])
 
     @listen_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
+    def on_ofpt_packet_in(self, event):
+        """Dispatch two KytosEvents to notify identified NNI interfaces.
+
+        Args:
+            event (:class:`~kytos.core.events.KytosEvent`):
+                Event with an LLDP packet as data.
+
+        """
+        self.notify_uplink_detected(event)
+
     def notify_uplink_detected(self, event):
         """Dispatch two KytosEvents to notify identified NNI interfaces.
 
@@ -222,6 +301,7 @@ class Main(KytosNApp):
             interface_a = switch_a.get_interface_by_port_no(port_a.value)
             interface_b = switch_b.get_interface_by_port_no(port_b.value)
 
+            self.loop_manager.process_if_looped(interface_a, interface_b)
             event_out = KytosEvent(name='kytos/of_lldp.interface.is.nni',
                                    content={'interface_a': interface_a,
                                             'interface_b': interface_b})
