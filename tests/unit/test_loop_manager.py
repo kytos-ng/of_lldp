@@ -241,6 +241,22 @@ class TestLoopManager(TestCase):
         self.loop_manager.handle_switch_metadata_changed(switch)
         assert self.loop_manager.ignored_loops[dpid] == [[1, 2]]
 
+    def test_handle_switch_metadata_changed_incrementally(self):
+        """Test handle_switch_metadata_changed incrementally."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        switch.id = dpid
+        switch.metadata = {"ignored_loops": [[1, 2]]}
+        self.loop_manager.ignored_loops = {}
+
+        assert dpid not in self.loop_manager.ignored_loops
+        self.loop_manager.handle_switch_metadata_changed(switch)
+        assert self.loop_manager.ignored_loops[dpid] == [[1, 2]]
+
+        switch.metadata = {"ignored_loops": [[1, 2], [3, 4]]}
+        self.loop_manager.handle_switch_metadata_changed(switch)
+        assert self.loop_manager.ignored_loops[dpid] == [[1, 2], [3, 4]]
+
     def test_handle_switch_metadata_changed_removed(self):
         """Test handle_switch_metadata_changed removed."""
         dpid = "00:00:00:00:00:00:00:01"
