@@ -121,10 +121,8 @@ class Main(KytosNApp):
                         interface_a, interface_b, LoopState.stopped.value
                     )
             except (KeyError, AttributeError) as exc:
-                items = self.loop_manager.get_stopped_loops()
-                log.error(f"try_to_publish_stopped_loops failed with: {items} "
-                          f"{str(exc)}")
-                return None
+                log.error("try_to_publish_stopped_loops failed with switch:"
+                          f"{dpid}, port_pair: {port_pair}. {str(exc)}")
 
     @listen_to('kytos/topology.switch.(enabled|disabled)')
     def handle_lldp_flows(self, event):
