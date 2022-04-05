@@ -313,11 +313,10 @@ class LoopManager:
 
     def handle_switch_metadata_changed(self, switch):
         """Handle switch metadata changed."""
-        if switch.id not in self.ignored_loops:
-            self.try_to_load_ignored_switch(switch)
-        else:
+        if "ignored_loops" not in switch.metadata:
             with self.loop_lock:
-                self.ignored_loops.pop(switch.dpid, None)
+                return self.ignored_loops.pop(switch.dpid, None)
+        return self.try_to_load_ignored_switch(switch)
 
     def try_to_load_ignored_switch(self, switch):
         """Try to load an ignored switch."""
