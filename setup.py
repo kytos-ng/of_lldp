@@ -133,19 +133,6 @@ class Linter(SimpleCommand):
         check_call('yala *.py tests', shell=True)
 
 
-class CITest(TestCommand):
-    """Run all CI tests."""
-
-    description = 'run all CI tests: unit and doc tests, linter'
-
-    def run(self):
-        """Run unit tests with coverage, doc tests and linter."""
-        coverage_cmd = 'python3 setup.py coverage %s' % self.get_args()
-        lint_cmd = 'python3 setup.py lint'
-        cmd = '%s && %s' % (coverage_cmd, lint_cmd)
-        check_call(cmd, shell=True)
-
-
 class KytosInstall:
     """Common code for all install types."""
 
@@ -273,7 +260,6 @@ setup(name=f'kytos_{NAPP_NAME}',
       },
       cmdclass={
           'clean': Cleaner,
-          'ci': CITest,
           'coverage': TestCoverage,
           'develop': DevelopMode,
           'install': InstallMode,
