@@ -1,6 +1,7 @@
 """NApp responsible to discover new switches and hosts."""
 import struct
 import time
+from datetime import datetime
 
 import requests
 from flask import jsonify, request
@@ -17,6 +18,7 @@ from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import listen_to
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
+from napps.kytos.of_lldp.liveness_manager import LivenessManager
 from napps.kytos.of_lldp.utils import get_cookie
 
 
@@ -29,8 +31,14 @@ class Main(KytosNApp):
         self.polling_time = settings.POLLING_TIME
         if hasattr(settings, "FLOW_VLAN_VID"):
             self.vlan_id = settings.FLOW_VLAN_VID
+        self.liveness_dead_multipler = settings.LIVENESS_DEAD_MULTIPLIER
+        self.dead_counter = self.liveness_dead_multipler
         self.execute_as_loop(self.polling_time)
         self.loop_manager = LoopManager(self.controller)
+        dead_interval = self.polling_time * self.liveness_dead_multipler
+        self.liveness_manager = LivenessManager(self.controller,
+                                                self.polling_time,
+                                                dead_interval)
 
     def execute(self):
         """Send LLDP Packets every 'POLLING_TIME' seconds to all switches."""
@@ -108,6 +116,11 @@ class Main(KytosNApp):
                     switch.dpid, interface.port_number)
 
         self.try_to_publish_stopped_loops()
+
+        self.dead_counter -= self.polling_time
+        if self.dead_counter <= 0:
+            self.dead_counter = self.liveness_dead_multipler
+            self.liveness_manager.reaper()
 
     def try_to_publish_stopped_loops(self):
         """Try to publish current stopped loops."""
@@ -300,6 +313,9 @@ class Main(KytosNApp):
             interface_b = switch_b.get_interface_by_port_no(port_b.value)
 
             self.loop_manager.process_if_looped(interface_a, interface_b)
+            if self.liveness_manager.is_enabled(*[interface_a, interface_b]):
+                self.liveness_manager.consume_hello(interface_a, interface_b,
+                                                    datetime.utcnow())
             event_out = KytosEvent(name='kytos/of_lldp.interface.is.nni',
                                    content={'interface_a': interface_a,
                                             'interface_b': interface_b})
