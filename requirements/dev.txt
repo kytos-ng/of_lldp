@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=requirements/dev.txt requirements/dev.in
 #
--e git+https://github.com/kytos-ng/kytos.git#egg=kytos
+-e git+https://github.com/kytos-ng/kytos.git@feature/liveness_status#egg=kytos
     # via -r requirements/dev.in
 -e .
     # via -r requirements/dev.in
