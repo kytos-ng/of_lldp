@@ -18,9 +18,8 @@ class ILSM:
     this state machine should call the transition accordingly.
     """
 
-    def __init__(self, dead_interval: int, state="init") -> None:
+    def __init__(self, state="init") -> None:
         """InterfaceLivenessStateMachine."""
-        self.dead_interval = dead_interval  # in seconds
         self.transitions = {
             "init": ["up", "down"],
             "up": ["down", "init"],
@@ -40,9 +39,9 @@ class ILSM:
         self.state = to_state
         return self.state
 
-    def reaper_check(self) -> Optional[str]:
+    def reaper_check(self, dead_interval: int) -> Optional[str]:
         """Try to transition to down. It must be called every dead_interval."""
-        if (datetime.utcnow() - self.last_hello_at).seconds > self.dead_interval:
+        if (datetime.utcnow() - self.last_hello_at).seconds > dead_interval:
             return self.transition_to("down")
         return None
 
@@ -95,11 +94,10 @@ class LivenessManager:
 
     """LivenessManager."""
 
-    def __init__(self, controller, dead_interval: int) -> None:
+    def __init__(self, controller) -> None:
         """LivenessManager."""
 
         self.controller = controller
-        self.dead_interval = dead_interval
         self.interfaces = {}
         # This dict is indexed by the lowest interface id of the pair.
         self.states = {}
@@ -151,7 +149,7 @@ class LivenessManager:
         min_id = min(interface_a.id, interface_b.id)
         is_interface_a_min_id = min_id == interface_a.id
         if min_id not in self.states:
-            lsm = LSM(ILSM(self.dead_interval), ILSM(self.dead_interval))
+            lsm = LSM(ILSM(state="init"), ILSM(state="init"))
             entry = {
                 "lsm": lsm,
             }
@@ -174,7 +172,7 @@ class LivenessManager:
                 Implies that the topology connection has changed, needs new ref
                 """
                 entry["interface_b"] = interface_b
-                entry["lsm"].ilsm_b = ILSM(self.dead_interval, state="init")
+                entry["lsm"].ilsm_b = ILSM(state="init")
         else:
             lsm.ilsm_b.consume_hello(received_at)
 
@@ -197,7 +195,7 @@ class LivenessManager:
             return False
         return True
 
-    def reaper(self):
+    def reaper(self, dead_interval: int):
         """Reaper check processable interfaces."""
         # TODO do not send redundant notifications.. if it's already down, don't send.
         # TODO on topology if it's not active or disabled just ignore?
@@ -211,12 +209,12 @@ class LivenessManager:
                 (
                     lsm.state == "down",
                     not self.should_process(intf_a),
-                    not self.should_process(intf_b)
+                    not self.should_process(intf_b),
                 )
             ):
                 continue
-            lsm.ilsm_a.reaper_check()
-            lsm.ilsm_b.reaper_check()
+            lsm.ilsm_a.reaper_check(dead_interval)
+            lsm.ilsm_b.reaper_check(dead_interval)
             lsm_next_state = lsm.next_state()
             self.try_to_publish_lsm_event(
                 lsm_next_state, value["interface_a"], value["interface_b"]
