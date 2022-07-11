@@ -95,13 +95,11 @@ class LivenessManager:
 
     """LivenessManager."""
 
-    def __init__(self, controller, hello_interval: int, dead_interval: int) -> None:
+    def __init__(self, controller, dead_interval: int) -> None:
         """LivenessManager."""
 
         self.controller = controller
-        self.hello_interval = hello_interval
         self.dead_interval = dead_interval
-        self.dead_interval_max = self.dead_interval * 1.01
         self.interfaces = {}
         # This dict is indexed by the lowest interface id of the pair.
         self.states = {}
