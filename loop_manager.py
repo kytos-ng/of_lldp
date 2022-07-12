@@ -53,7 +53,7 @@ class LoopManager:
             return True
         return False
 
-    def process_if_looped(
+    async def process_if_looped(
         self,
         interface_a,
         interface_b,
@@ -69,14 +69,14 @@ class LoopManager:
                 not self.is_loop_ignored(dpid_a, port_a, port_b),
             )
         ):
-            self.publish_loop_state(
+            await self.publish_loop_state(
                 interface_a, interface_b, LoopState.detected.value
             )
-            self.publish_loop_actions(interface_a, interface_b)
+            await self.publish_loop_actions(interface_a, interface_b)
             return True
         return False
 
-    def publish_loop_state(
+    async def publish_loop_state(
         self,
         interface_a,
         interface_b,
@@ -94,9 +94,9 @@ class LoopManager:
                 "port_numbers": [port_a, port_b],
             },
         )
-        self.controller.buffers.app.put(event)
+        await self.controller.buffers.app.aput(event)
 
-    def publish_loop_actions(
+    async def publish_loop_actions(
         self,
         interface_a,
         interface_b,
@@ -111,7 +111,7 @@ class LoopManager:
                     "interface_b": interface_b,
                 },
             )
-            self.controller.buffers.app.put(event)
+            await self.controller.buffers.app.aput(event)
 
     def handle_loop_detected(self, interface_id, dpid, port_pair):
         """Handle loop detected."""
