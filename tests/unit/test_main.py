@@ -6,7 +6,60 @@ from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
                                get_switch_mock, get_test_client)
 
 from napps.kytos.of_lldp.utils import get_cookie
+from kytos.core.events import KytosEvent
 from tests.helpers import get_topology_mock
+
+
+@patch('napps.kytos.of_lldp.managers.LivenessManager.consume_hello')
+@patch('napps.kytos.of_lldp.loop_manager.LoopManager.process_if_looped')
+@patch('kytos.core.buffers.KytosEventBuffer.aput')
+@patch('kytos.core.controller.Controller.get_switch_by_dpid')
+@patch('napps.kytos.of_lldp.main.Main._unpack_non_empty')
+@patch('napps.kytos.of_lldp.main.UBInt32')
+@patch('napps.kytos.of_lldp.main.DPID')
+@patch('napps.kytos.of_lldp.main.LLDP')
+@patch('napps.kytos.of_lldp.main.Ethernet')
+async def test_on_ofpt_packet_in(*args):
+    """Test on_ofpt_packet_in."""
+    (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
+     mock_unpack_non_empty, mock_get_switch_by_dpid,
+     mock_aput, mock_process_looped, mock_consume_hello) = args
+
+    # pylint: disable=bad-option-value, import-outside-toplevel
+    from napps.kytos.of_lldp.main import Main
+    topology = get_topology_mock()
+    controller = get_controller_mock()
+    controller.switches = topology.switches
+    napp = Main(controller)
+
+    switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+    message = MagicMock(in_port=1, data='data')
+    event = KytosEvent('ofpt_packet_in', content={'source': switch.connection,
+                       'message': message})
+
+    mocked, ethernet, lldp, dpid, port_b = [MagicMock() for _ in range(5)]
+    mocked.value = 1
+    mock_ubint32.return_value = mocked
+    ethernet.ether_type = 0x88CC
+    ethernet.data = 'eth_data'
+    lldp.chassis_id.sub_value = 'chassis_id'
+    lldp.port_id.sub_value = 'port_id'
+    dpid.value = "00:00:00:00:00:00:00:02"
+    port_b.value = 2
+
+    mock_unpack_non_empty.side_effect = [ethernet, lldp, dpid, port_b]
+    mock_get_switch_by_dpid.return_value = get_switch_mock(dpid.value,
+                                                           0x04)
+    await napp.on_ofpt_packet_in(event)
+
+    calls = [call(mock_ethernet, message.data),
+             call(mock_lldp, ethernet.data),
+             call(mock_dpid, lldp.chassis_id.sub_value),
+             call(mock_ubint32, lldp.port_id.sub_value)]
+    mock_unpack_non_empty.assert_has_calls(calls)
+    mock_process_looped.assert_called()
+    assert mock_consume_hello.call_count == 1
+    assert controller.buffers.app.aput.call_count == 1
 
 
 # pylint: disable=protected-access,too-many-public-methods
@@ -102,59 +155,6 @@ class TestMain(TestCase):
         mock_post.return_value = mock
         self.napp._handle_lldp_flows(event_post)
         self.assertTrue(mock_post.call_count, 3)
-
-    @patch('napps.kytos.of_lldp.loop_manager.LoopManager.process_if_looped')
-    @patch('kytos.core.buffers.KytosEventBuffer.put')
-    @patch('napps.kytos.of_lldp.main.KytosEvent')
-    @patch('kytos.core.controller.Controller.get_switch_by_dpid')
-    @patch('napps.kytos.of_lldp.main.Main._unpack_non_empty')
-    @patch('napps.kytos.of_lldp.main.UBInt32')
-    @patch('napps.kytos.of_lldp.main.DPID')
-    @patch('napps.kytos.of_lldp.main.LLDP')
-    @patch('napps.kytos.of_lldp.main.Ethernet')
-    def test_notify_uplink_detected(self, *args):
-        """Test notify_uplink_detected method."""
-        (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
-         mock_unpack_non_empty, mock_get_switch_by_dpid, mock_kytos_event,
-         mock_buffer_put, mock_process_looped) = args
-
-        switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
-        message = MagicMock()
-        message.in_port = 1
-        message.data = 'data'
-        event = get_kytos_event_mock(name='kytos/of_core.v0x0[14].messages.in.'
-                                          'ofpt_packet_in',
-                                     content={'source': switch.connection,
-                                              'message': message})
-
-        mocked = MagicMock()
-        mocked.value = 1
-        mock_ubint32.return_value = mocked
-        ethernet = MagicMock()
-        ethernet.ether_type = 0x88CC
-        ethernet.data = 'eth_data'
-        lldp = MagicMock()
-        lldp.chassis_id.sub_value = 'chassis_id'
-        lldp.port_id.sub_value = 'port_id'
-        dpid = MagicMock()
-        dpid.value = "00:00:00:00:00:00:00:02"
-        port_b = MagicMock()
-        port_b.value = 2
-
-        mock_unpack_non_empty.side_effect = [ethernet, lldp, dpid, port_b]
-        mock_get_switch_by_dpid.return_value = get_switch_mock(dpid.value,
-                                                               0x04)
-        mock_kytos_event.return_value = 'nni'
-
-        self.napp.notify_uplink_detected(event)
-
-        calls = [call(mock_ethernet, message.data),
-                 call(mock_lldp, ethernet.data),
-                 call(mock_dpid, lldp.chassis_id.sub_value),
-                 call(mock_ubint32, lldp.port_id.sub_value)]
-        mock_unpack_non_empty.assert_has_calls(calls)
-        mock_buffer_put.assert_called_with('nni')
-        mock_process_looped.assert_called()
 
     @patch('napps.kytos.of_lldp.main.PO13')
     @patch('napps.kytos.of_lldp.main.PO10')
