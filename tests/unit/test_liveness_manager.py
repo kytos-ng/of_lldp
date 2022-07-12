@@ -3,7 +3,9 @@ from datetime import datetime
 from datetime import timedelta
 import pytest
 
+from unittest.mock import AsyncMock
 from napps.kytos.of_lldp.managers.liveness import ILSM
+from napps.kytos.of_lldp.managers.liveness import LSM
 
 
 class TestILSM:
@@ -64,15 +66,150 @@ class TestILSM:
 
 class TestLSM:
 
-    """Test LSM. """
+    """Test LSM."""
 
-    def test_rpr(self) -> None:
-        """Test rpr."""
-        pass
+    def test_rpr(self, lsm) -> None:
+        """Test repr."""
+        assert str(lsm) == f"LSM(init, {str(lsm.ilsm_a)}, {str(lsm.ilsm_b)})"
+
+    @pytest.mark.parametrize(
+        "ilsm_a_state,ilsm_b_state,expected",
+        [
+            ("init", "dontcare", "init"),
+            ("dontcare", "init", "init"),
+            ("down", "dontcare", "down"),
+            ("dontcare", "down", "down"),
+            ("up", "init", "init"),
+            ("init", "up", "init"),
+            ("up", "up", "up"),
+        ],
+    )
+    def test_agg_state(self, ilsm_a_state, ilsm_b_state, expected, lsm) -> None:
+        """Test aggregated state."""
+        lsm.ilsm_a.state, lsm.ilsm_b.state = ilsm_a_state, ilsm_b_state
+        assert lsm.agg_state() == expected
+
+    @pytest.mark.parametrize(
+        "from_state,to",
+        [
+            ("init", "up"),
+            ("init", "down"),
+            ("up", "down"),
+            ("up", "init"),
+            ("down", "up"),
+            ("down", "init"),
+        ],
+    )
+    def test_lsm_transitions(self, from_state, to) -> None:
+        """Test LSM transitions."""
+        lsm = LSM(ILSM(from_state), ILSM(from_state), from_state)
+        assert lsm._transition_to(to) == to
+        assert lsm.state == to
+
+    def test_next_state(self, lsm) -> None:
+        """Test next_state."""
+        lsm.ilsm_a.transition_to("up")
+        lsm.ilsm_b.transition_to("up")
+        assert lsm.next_state() == "up"
+        assert lsm.state == "up"
+
+        assert not lsm.next_state()
+        assert lsm.state == "up"
+
+        lsm.ilsm_a.transition_to("down")
+        assert lsm.next_state() == "down"
+        assert lsm.state == "down"
+
+        assert not lsm.next_state()
+        assert lsm.state == "down"
 
 
 class TestLivenessManager:
 
     """TestLivenessManager."""
 
-    pass
+    def test_is_enabled(self, liveness_manager, intf_one) -> None:
+        """Test is_enabled."""
+        assert not liveness_manager.interfaces
+        assert not liveness_manager.is_enabled(intf_one)
+        liveness_manager.interfaces[intf_one.id] = intf_one
+        assert liveness_manager.is_enabled(intf_one)
+
+    def test_enable(self, liveness_manager, intf_one, intf_two) -> None:
+        """Test enable."""
+        assert not liveness_manager.interfaces
+        liveness_manager.enable(intf_one, intf_two)
+        assert intf_one.id in liveness_manager.interfaces
+        assert intf_two.id in liveness_manager.interfaces
+
+    def test_disable(self, liveness_manager, intf_one, intf_two) -> None:
+        """Test disable."""
+        assert not liveness_manager.interfaces
+        liveness_manager.enable(intf_one, intf_two)
+        assert intf_one.id in liveness_manager.interfaces
+        liveness_manager.disable(intf_one, intf_two)
+        assert intf_one.id not in liveness_manager.interfaces
+
+    def test_try_to_publish_lsm_event(
+        self, liveness_manager, intf_one, intf_two
+    ) -> None:
+        """Test try_to_publish_lsm_event."""
+        event_suffix = None
+        liveness_manager.try_to_publish_lsm_event(event_suffix, intf_one, intf_two)
+        assert liveness_manager.controller.buffers.app.put.call_count == 0
+        event_suffix = "up"
+        liveness_manager.try_to_publish_lsm_event(event_suffix, intf_one, intf_two)
+        assert liveness_manager.controller.buffers.app.put.call_count == 1
+
+    async def test_consume_hello(
+        self, liveness_manager, intf_one, intf_two
+    ) -> None:
+        """Test consume_hello."""
+        assert not liveness_manager.states
+        received_at = datetime.utcnow()
+        liveness_manager.atry_to_publish_lsm_event = AsyncMock()
+
+        await liveness_manager.consume_hello(intf_one, intf_two, received_at)
+        assert intf_one.id in liveness_manager.states
+        assert intf_two.id not in liveness_manager.states
+        entry = liveness_manager.states[intf_one.id]
+        assert entry["interface_a"] == intf_one
+        assert entry["interface_b"] == intf_two
+        assert entry["lsm"].ilsm_a.state == "up"
+        assert entry["lsm"].ilsm_b.state == "init"
+        assert entry["lsm"].state == "init"
+        assert liveness_manager.atry_to_publish_lsm_event.call_count == 1
+
+        received_at = datetime.utcnow()
+        await liveness_manager.consume_hello(intf_two, intf_one, received_at)
+        assert entry["lsm"].ilsm_a.state == "up"
+        assert entry["lsm"].ilsm_b.state == "up"
+        assert entry["lsm"].state == "up"
+        assert liveness_manager.atry_to_publish_lsm_event.call_count == 2
+
+    async def test_consume_hello_reinit(
+        self, liveness_manager, intf_one, intf_two, intf_three
+    ) -> None:
+        """Test consume_hello reinitialization, this test a corner
+        case where one end of the link has a new interface."""
+        assert not liveness_manager.states
+        received_at = datetime.utcnow()
+        liveness_manager.atry_to_publish_lsm_event = AsyncMock()
+
+        await liveness_manager.consume_hello(intf_one, intf_two, received_at)
+        await liveness_manager.consume_hello(intf_two, intf_one, received_at)
+        assert intf_one.id in liveness_manager.states
+        entry = liveness_manager.states[intf_one.id]
+        assert entry["interface_a"] == intf_one
+        assert entry["interface_b"] == intf_two
+        assert entry["lsm"].ilsm_a.state == "up"
+        assert entry["lsm"].ilsm_b.state == "up"
+        assert entry["lsm"].state == "up"
+        assert liveness_manager.atry_to_publish_lsm_event.call_count == 2
+
+        await liveness_manager.consume_hello(intf_one, intf_three, received_at)
+        entry = liveness_manager.states[intf_one.id]
+        assert entry["lsm"].ilsm_a.state == "up"
+        assert entry["lsm"].ilsm_b.state == "init"
+        assert entry["lsm"].state == "init"
+        assert liveness_manager.atry_to_publish_lsm_event.call_count == 3
