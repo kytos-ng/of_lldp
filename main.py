@@ -15,10 +15,10 @@ from pyof.v0x04.common.port import PortNo as Port13
 from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
-from kytos.core.helpers import listen_to
+from kytos.core.helpers import alisten_to, listen_to
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
-from napps.kytos.of_lldp.liveness_manager import LivenessManager
+from napps.kytos.of_lldp.managers import LivenessManager
 from napps.kytos.of_lldp.utils import get_cookie
 
 
@@ -32,13 +32,10 @@ class Main(KytosNApp):
         if hasattr(settings, "FLOW_VLAN_VID"):
             self.vlan_id = settings.FLOW_VLAN_VID
         self.liveness_dead_multipler = settings.LIVENESS_DEAD_MULTIPLIER
-        self.dead_counter = self.liveness_dead_multipler
         self.execute_as_loop(self.polling_time)
         self.loop_manager = LoopManager(self.controller)
-        dead_interval = self.polling_time * self.liveness_dead_multipler
-        self.liveness_manager = LivenessManager(self.controller,
-                                                self.polling_time,
-                                                dead_interval)
+        self.dead_interval = self.polling_time * self.liveness_dead_multipler
+        self.liveness_manager = LivenessManager(self.controller)
 
     def execute(self):
         """Send LLDP Packets every 'POLLING_TIME' seconds to all switches."""
@@ -116,11 +113,7 @@ class Main(KytosNApp):
                     switch.dpid, interface.port_number)
 
         self.try_to_publish_stopped_loops()
-
-        self.dead_counter -= self.polling_time
-        if self.dead_counter <= 0:
-            self.dead_counter = self.liveness_dead_multipler
-            self.liveness_manager.reaper()
+        self.liveness_manager.reaper(self.dead_interval)
 
     def try_to_publish_stopped_loops(self):
         """Try to publish current stopped loops."""
@@ -256,18 +249,8 @@ class Main(KytosNApp):
                               f" data: {data}")
                 _retry_if_status_code(res, endpoint, data, [424, 500])
 
-    @listen_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
-    def on_ofpt_packet_in(self, event):
-        """Dispatch two KytosEvents to notify identified NNI interfaces.
-
-        Args:
-            event (:class:`~kytos.core.events.KytosEvent`):
-                Event with an LLDP packet as data.
-
-        """
-        self.notify_uplink_detected(event)
-
-    def notify_uplink_detected(self, event):
+    @alisten_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
+    async def on_ofpt_packet_in(self, event):
         """Dispatch two KytosEvents to notify identified NNI interfaces.
 
         Args:
@@ -312,14 +295,13 @@ class Main(KytosNApp):
             interface_a = switch_a.get_interface_by_port_no(port_a.value)
             interface_b = switch_b.get_interface_by_port_no(port_b.value)
 
-            self.loop_manager.process_if_looped(interface_a, interface_b)
-            if self.liveness_manager.is_enabled(*[interface_a, interface_b]):
-                self.liveness_manager.consume_hello(interface_a, interface_b,
-                                                    datetime.utcnow())
+            await self.loop_manager.process_if_looped(interface_a, interface_b)
+            await self.liveness_manager.consume_hello_if_enabled(interface_a,
+                                                                 interface_b)
             event_out = KytosEvent(name='kytos/of_lldp.interface.is.nni',
                                    content={'interface_a': interface_a,
                                             'interface_b': interface_b})
-            self.controller.buffers.app.put(event_out)
+            await self.controller.buffers.app.aput(event_out)
 
     def notify_lldp_change(self, state, interface_ids):
         """Dispatch a KytosEvent to notify changes to the LLDP status."""
