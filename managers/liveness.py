@@ -1,7 +1,7 @@
 """LivenessManager."""
 import logging
 
-from typing import Optional
+from typing import Optional, Tuple
 from datetime import datetime
 from kytos.core.common import EntityStatus
 from kytos.core.events import KytosEvent
@@ -99,9 +99,10 @@ class LivenessManager:
         """LivenessManager."""
 
         self.controller = controller
-        self.interfaces = {}
-        # This dict is indexed by the lowest interface id of the pair.
-        self.liveness = {}
+
+        self.interfaces = {}  # liveness enabled
+        self.liveness = {}  # indexed by the lowest interface id of the pair
+        self.liveness_ids = {}  # interface id to lowest id of the pair
 
     def is_enabled(self, *interfaces) -> bool:
         """Check if liveness is enabled on an interface."""
@@ -110,12 +111,12 @@ class LivenessManager:
                 return False
         return True
 
-    def enable(self, *interfaces):
+    def enable(self, *interfaces) -> None:
         """Enable liveness on interface."""
         for interface in interfaces:
             self.interfaces[interface.id] = interface
 
-    def disable(self, *interfaces):
+    def disable(self, *interfaces) -> None:
         """Disable liveness interface."""
         for interface in interfaces:
             self.interfaces.pop(interface.id, None)
@@ -146,8 +147,22 @@ class LivenessManager:
         """Consume liveness hello if enabled."""
         if not self.is_enabled(interface_a, interface_b):
             return
-        await self.consume_hello(interface_a, interface_b,
-                                 datetime.utcnow())
+        await self.consume_hello(interface_a, interface_b, datetime.utcnow())
+
+    def get_interface_status(
+        self, interface_id
+    ) -> Tuple[Optional[str], Optional[datetime]]:
+        """Get interface status."""
+        if interface_id not in self.interfaces:
+            return None, None
+        min_id = self.liveness_ids.get(interface_id)
+        if min_id:
+            lsm = self.liveness[min_id]["lsm"]
+            if interface_id == min_id:
+                return lsm.ilsm_a.state, lsm.ilsm_a.last_hello_at
+            else:
+                return lsm.ilsm_b.state, lsm.ilsm_b.last_hello_at
+        return "init", None
 
     async def consume_hello(
         self, interface_a, interface_b, received_at: datetime
@@ -165,6 +180,8 @@ class LivenessManager:
             else:
                 entry["interface_a"], entry["interface_b"] = interface_b, interface_a
             self.liveness[min_id] = entry
+            self.liveness_ids[interface_a.id] = min_id
+            self.liveness_ids[interface_b.id] = min_id
 
         entry = self.liveness[min_id]
         lsm = entry["lsm"]

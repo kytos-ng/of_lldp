@@ -178,6 +178,17 @@ class TestLivenessManager:
         )
         assert liveness_manager.controller.buffers.app.aput.call_count == 1
 
+    async def test_get_interface_status(
+        self, liveness_manager, intf_one, intf_two
+    ) -> None:
+        """Test get_interface_status."""
+        assert liveness_manager.get_interface_status(intf_one.id) == (None, None)
+        liveness_manager.enable(intf_one, intf_two)
+        assert liveness_manager.get_interface_status(intf_one.id) == ("init", None)
+        received_at = datetime.utcnow()
+        await liveness_manager.consume_hello(intf_one, intf_two, received_at)
+        assert liveness_manager.get_interface_status(intf_one.id) == ("up", received_at)
+
     async def test_consume_hello(self, liveness_manager, intf_one, intf_two) -> None:
         """Test consume_hello."""
         assert not liveness_manager.liveness
