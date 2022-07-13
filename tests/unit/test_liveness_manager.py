@@ -3,7 +3,8 @@ from datetime import datetime
 from datetime import timedelta
 import pytest
 
-from unittest.mock import AsyncMock
+from kytos.core.common import EntityStatus
+from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.of_lldp.managers.liveness import ILSM
 from napps.kytos.of_lldp.managers.liveness import LSM
 
@@ -161,18 +162,32 @@ class TestLivenessManager:
         liveness_manager.try_to_publish_lsm_event(event_suffix, intf_one, intf_two)
         assert liveness_manager.controller.buffers.app.put.call_count == 1
 
-    async def test_consume_hello(
+    async def test_atry_to_publish_lsm_event(
         self, liveness_manager, intf_one, intf_two
     ) -> None:
+        """Test atry_to_publish_lsm_event."""
+        liveness_manager.controller.buffers.app.aput = AsyncMock()
+        event_suffix = None
+        await liveness_manager.atry_to_publish_lsm_event(
+            event_suffix, intf_one, intf_two
+        )
+        assert liveness_manager.controller.buffers.app.aput.call_count == 0
+        event_suffix = "up"
+        await liveness_manager.atry_to_publish_lsm_event(
+            event_suffix, intf_one, intf_two
+        )
+        assert liveness_manager.controller.buffers.app.aput.call_count == 1
+
+    async def test_consume_hello(self, liveness_manager, intf_one, intf_two) -> None:
         """Test consume_hello."""
-        assert not liveness_manager.states
+        assert not liveness_manager.liveness
         received_at = datetime.utcnow()
         liveness_manager.atry_to_publish_lsm_event = AsyncMock()
 
         await liveness_manager.consume_hello(intf_one, intf_two, received_at)
-        assert intf_one.id in liveness_manager.states
-        assert intf_two.id not in liveness_manager.states
-        entry = liveness_manager.states[intf_one.id]
+        assert intf_one.id in liveness_manager.liveness
+        assert intf_two.id not in liveness_manager.liveness
+        entry = liveness_manager.liveness[intf_one.id]
         assert entry["interface_a"] == intf_one
         assert entry["interface_b"] == intf_two
         assert entry["lsm"].ilsm_a.state == "up"
@@ -192,14 +207,14 @@ class TestLivenessManager:
     ) -> None:
         """Test consume_hello reinitialization, this test a corner
         case where one end of the link has a new interface."""
-        assert not liveness_manager.states
+        assert not liveness_manager.liveness
         received_at = datetime.utcnow()
         liveness_manager.atry_to_publish_lsm_event = AsyncMock()
 
         await liveness_manager.consume_hello(intf_one, intf_two, received_at)
         await liveness_manager.consume_hello(intf_two, intf_one, received_at)
-        assert intf_one.id in liveness_manager.states
-        entry = liveness_manager.states[intf_one.id]
+        assert intf_one.id in liveness_manager.liveness
+        entry = liveness_manager.liveness[intf_one.id]
         assert entry["interface_a"] == intf_one
         assert entry["interface_b"] == intf_two
         assert entry["lsm"].ilsm_a.state == "up"
@@ -208,8 +223,59 @@ class TestLivenessManager:
         assert liveness_manager.atry_to_publish_lsm_event.call_count == 2
 
         await liveness_manager.consume_hello(intf_one, intf_three, received_at)
-        entry = liveness_manager.states[intf_one.id]
+        entry = liveness_manager.liveness[intf_one.id]
         assert entry["lsm"].ilsm_a.state == "up"
         assert entry["lsm"].ilsm_b.state == "init"
         assert entry["lsm"].state == "init"
         assert liveness_manager.atry_to_publish_lsm_event.call_count == 3
+
+    def test_should_call_reaper(self, liveness_manager, intf_one) -> None:
+        """Test should call reaper."""
+        intf_one.switch.is_connected = lambda: True
+        intf_one.lldp = True
+        liveness_manager.enable(intf_one)
+        assert liveness_manager.should_call_reaper(intf_one)
+
+        intf_one.lldp = False
+        assert not liveness_manager.should_call_reaper(intf_one)
+        intf_one.lldp = True
+        assert liveness_manager.should_call_reaper(intf_one)
+
+        liveness_manager.disable(intf_one)
+        assert not liveness_manager.should_call_reaper(intf_one)
+        liveness_manager.enable(intf_one)
+        assert liveness_manager.should_call_reaper(intf_one)
+
+        intf_one.switch.is_connected = lambda: False
+        assert not liveness_manager.should_call_reaper(intf_one)
+        intf_one.switch.is_connected = lambda: True
+        assert liveness_manager.should_call_reaper(intf_one)
+
+    def test_reaper(self, liveness_manager, lsm, intf_one, intf_two) -> None:
+        """Test reaper."""
+        intf_one.status, intf_two.status = EntityStatus.UP, EntityStatus.UP
+        liveness_manager.liveness = {
+            intf_one.id: {"interface_a": intf_one, "interface_b": intf_two, "lsm": lsm}
+        }
+        liveness_manager.should_call_reaper = MagicMock(return_value=True)
+        liveness_manager.try_to_publish_lsm_event = MagicMock()
+        lsm.ilsm_a.reaper_check = MagicMock()
+        lsm.ilsm_b.reaper_check = MagicMock()
+
+        dead_interval = 3
+        liveness_manager.reaper(dead_interval)
+
+        lsm.ilsm_a.reaper_check.assert_called_with(dead_interval)
+        lsm.ilsm_b.reaper_check.assert_called_with(dead_interval)
+        assert liveness_manager.try_to_publish_lsm_event.call_count == 1
+
+    async def test_consume_hello_if_enabled(self, liveness_manager) -> None:
+        """Test test_consume_hello_if_enabled."""
+        liveness_manager.is_enabled = MagicMock(return_value=True)
+        liveness_manager.consume_hello = AsyncMock()
+        await liveness_manager.consume_hello_if_enabled(MagicMock(), MagicMock())
+        assert liveness_manager.consume_hello.call_count == 1
+
+        liveness_manager.is_enabled = MagicMock(return_value=False)
+        await liveness_manager.consume_hello_if_enabled(MagicMock(), MagicMock())
+        assert liveness_manager.consume_hello.call_count == 1

@@ -3,6 +3,7 @@ import logging
 
 from typing import Optional
 from datetime import datetime
+from kytos.core.common import EntityStatus
 from kytos.core.events import KytosEvent
 
 # pylint: disable=invalid-name
@@ -100,8 +101,7 @@ class LivenessManager:
         self.controller = controller
         self.interfaces = {}
         # This dict is indexed by the lowest interface id of the pair.
-        self.states = {}
-        self.interfaces_idx = {}
+        self.liveness = {}
 
     def is_enabled(self, *interfaces) -> bool:
         """Check if liveness is enabled on an interface."""
@@ -142,28 +142,31 @@ class LivenessManager:
         event = KytosEvent(name=name, content=content)
         self.controller.buffers.app.put(event)
 
+    async def consume_hello_if_enabled(self, interface_a, interface_b):
+        """Consume liveness hello if enabled."""
+        if not self.is_enabled(interface_a, interface_b):
+            return
+        await self.consume_hello(interface_a, interface_b,
+                                 datetime.utcnow())
+
     async def consume_hello(
         self, interface_a, interface_b, received_at: datetime
     ) -> None:
         """Consume liveness hello event."""
         min_id = min(interface_a.id, interface_b.id)
         is_interface_a_min_id = min_id == interface_a.id
-        if min_id not in self.states:
+        if min_id not in self.liveness:
             lsm = LSM(ILSM(state="init"), ILSM(state="init"))
             entry = {
                 "lsm": lsm,
             }
             if is_interface_a_min_id:
-                entry["interface_a"] = interface_a
-                entry["interface_b"] = interface_b
+                entry["interface_a"], entry["interface_b"] = interface_a, interface_b
             else:
-                entry["interface_a"] = interface_b
-                entry["interface_b"] = interface_a
-            self.states[min_id] = entry
-            self.interfaces_idx[interface_a.id] = min_id
-            self.interfaces_idx[interface_b.id] = min_id
+                entry["interface_a"], entry["interface_b"] = interface_b, interface_a
+            self.liveness[min_id] = entry
 
-        entry = self.states[min_id]
+        entry = self.liveness[min_id]
         lsm = entry["lsm"]
         if is_interface_a_min_id:
             lsm.ilsm_a.consume_hello(received_at)
@@ -183,23 +186,21 @@ class LivenessManager:
         )
         await self.atry_to_publish_lsm_event(lsm_next_state, interface_a, interface_b)
 
-    def should_process(self, interface) -> bool:
-        """Should process."""
-        if any(
+    def should_call_reaper(self, interface) -> bool:
+        """Should call reaper."""
+        if all(
             (
-                not interface.switch.is_connected(),
-                not interface.lldp,
-                # TODO not feature enabled...
+                interface.switch.is_connected(),
+                interface.lldp,
+                self.is_enabled(interface),
             )
         ):
-            return False
-        return True
+            return True
+        return False
 
     def reaper(self, dead_interval: int):
         """Reaper check processable interfaces."""
-        # TODO do not send redundant notifications.. if it's already down, don't send.
-        # TODO on topology if it's not active or disabled just ignore?
-        for value in self.states.values():
+        for value in self.liveness.values():
             lsm, intf_a, intf_b = (
                 value["lsm"],
                 value["interface_a"],
@@ -208,14 +209,22 @@ class LivenessManager:
             if any(
                 (
                     lsm.state == "down",
-                    not self.should_process(intf_a),
-                    not self.should_process(intf_b),
+                    not self.should_call_reaper(intf_a),
+                    not self.should_call_reaper(intf_b),
                 )
             ):
                 continue
+
             lsm.ilsm_a.reaper_check(dead_interval)
             lsm.ilsm_b.reaper_check(dead_interval)
             lsm_next_state = lsm.next_state()
-            self.try_to_publish_lsm_event(
-                lsm_next_state, value["interface_a"], value["interface_b"]
-            )
+
+            if all(
+                (
+                    intf_a.status == EntityStatus.UP,
+                    intf_b.status == EntityStatus.UP,
+                )
+            ):
+                self.try_to_publish_lsm_event(
+                    lsm_next_state, value["interface_a"], value["interface_b"]
+                )
