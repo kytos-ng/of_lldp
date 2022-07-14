@@ -326,6 +326,13 @@ class Main(KytosNApp):
                                content=content)
         self.controller.buffers.app.put(event_out)
 
+    def publish_liveness_status(self, event_suffix, interfaces):
+        """Dispatch a KytosEvent to publish liveness admin status."""
+        content = {"interfaces": interfaces}
+        name = f"kytos/of_lldp.liveness.{event_suffix}"
+        event_out = KytosEvent(name=name, content=content)
+        self.controller.buffers.app.put(event_out)
+
     def shutdown(self):
         """End of the application."""
         log.debug('Shutting down...')
@@ -521,11 +528,9 @@ class Main(KytosNApp):
             return jsonify(f"Interface IDs {diff} not found"), 404
 
         intfs = [interfaces[_id] for _id in intf_ids]
-        count = self.liveness_controller.enable_interfaces(intf_ids)
+        self.liveness_controller.enable_interfaces(intf_ids)
         self.liveness_manager.enable(*intfs)
-        if count:
-            pass
-            # TODO notification
+        self.publish_liveness_status("enabled", intfs)
         return jsonify(), 200
 
     @rest("v1/liveness/disable", methods=["POST"])
@@ -541,13 +546,9 @@ class Main(KytosNApp):
             return jsonify(f"Interface IDs {diff} not found"), 404
 
         intfs = [interfaces[_id] for _id in intf_ids if _id in interfaces]
-        count = self.liveness_controller.disable_interfaces(intf_ids)
+        self.liveness_controller.disable_interfaces(intf_ids)
         self.liveness_manager.disable(*intfs)
-        if count != len(intf_ids):
-            return jsonify("Some interfaces weren't disabled"), 400
-        if count:
-            pass
-            # TODO notify
+        self.publish_liveness_status("disabled", intfs)
         return jsonify(), 200
 
     @rest("v1/liveness/", methods=["GET"])
