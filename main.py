@@ -528,6 +528,10 @@ class Main(KytosNApp):
             return jsonify(f"Interface IDs {diff} not found"), 404
 
         intfs = [interfaces[_id] for _id in intf_ids]
+        non_lldp = [intf.id for intf in intfs if not intf.lldp]
+        if non_lldp:
+            msg = f"Interface IDs {non_lldp} don't have LLDP enabled"
+            return jsonify(msg), 400
         self.liveness_controller.enable_interfaces(intf_ids)
         self.liveness_manager.enable(*intfs)
         self.publish_liveness_status("enabled", intfs)
@@ -573,7 +577,7 @@ class Main(KytosNApp):
             }
             return jsonify(body), 200
         interfaces = []
-        for interface_id in self.liveness_manager.interfaces.keys():
+        for interface_id in list(self.liveness_manager.interfaces.keys()):
             status, last_hello_at = self.liveness_manager.get_interface_status(
                 interface_id
             )
@@ -584,7 +588,7 @@ class Main(KytosNApp):
     @rest("v1/liveness/pair", methods=["GET"])
     def get_liveness_interface_pairs(self):
         pairs = []
-        for entry in self.liveness_manager.liveness.values():
+        for entry in list(self.liveness_manager.liveness.values()):
             lsm = entry["lsm"]
             pair = {
                 "interface_a": {

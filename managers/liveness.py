@@ -120,6 +120,8 @@ class LivenessManager:
         """Disable liveness interface."""
         for interface in interfaces:
             self.interfaces.pop(interface.id, None)
+            min_id = self.liveness_ids.pop(interface.id, None)
+            self.liveness.pop(min_id, None)
 
     async def atry_to_publish_lsm_event(
         self, event_suffix: str, interface_a, interface_b
@@ -156,7 +158,7 @@ class LivenessManager:
         if interface_id not in self.interfaces:
             return None, None
         min_id = self.liveness_ids.get(interface_id)
-        if min_id:
+        if min_id and min_id in self.liveness:
             lsm = self.liveness[min_id]["lsm"]
             if interface_id == min_id:
                 return lsm.ilsm_a.state, lsm.ilsm_a.last_hello_at
