@@ -30,7 +30,8 @@ class LoopManager:
         self.settings = settings
         self.ignored_loops = settings.LLDP_IGNORED_LOOPS
         self.actions = settings.LLDP_LOOP_ACTIONS
-        self.stopped_interval = 3 * settings.POLLING_TIME
+        self.dead_multiplier = int(napp_settings.LLDP_LOOP_DEAD_MULTIPLIER)
+        self.stopped_interval = self.dead_multiplier * settings.POLLING_TIME
         self.log_every = settings.LOOP_LOG_EVERY
 
     def is_loop_ignored(self, dpid, port_a, port_b):

@@ -10,6 +10,8 @@ TOPOLOGY_URL = 'http://localhost:8181/api/kytos/topology/v3'
 LLDP_LOOP_ACTIONS = ["log"]  # supported actions ["log", "disable"]
 LLDP_IGNORED_LOOPS = {}  # ignored loops per dpid {"dpid": [[1, 2]]}
 # LLDP_IGNORED_LOOPS can be overwritten by switch.metadata.ignored_loops
+LLDP_LOOP_DEAD_MULTIPLIER = 5
+# Loop detection dead interval is POLLING_TIME * LIVENESS_DEAD_MULTIPLIER
 
 LOOP_LOG_EVERY = int(max(900 / max(POLLING_TIME, 1), 1))  # 5 mins by default
 
