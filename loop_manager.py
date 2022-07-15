@@ -252,7 +252,7 @@ class LoopManager:
         response = self.del_interface_metadata(interface_a.id, key)
         if response.status_code != 200:
             log.error(
-                f"Failed to delete metadata key {key} on interface ",
+                f"Failed to delete metadata key {key} on interface "
                 f"{interface_a.id}",
             )
 
