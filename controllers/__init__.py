@@ -1,10 +1,12 @@
 """LivenessController."""
 
 # pylint: disable=invalid-name
+import logging
 import os
 from datetime import datetime
 from typing import List
 
+import pymongo
 from pymongo.errors import AutoReconnect
 from pymongo.operations import UpdateOne
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_random
@@ -13,6 +15,9 @@ from kytos.core.db import Mongo
 from kytos.core.retry import before_sleep, for_all_methods, retries
 
 from ..db.models import LivenessDoc
+
+# pylint: disable=invalid-name
+log = logging.getLogger("kytos.napps.kytos/of_lldp")
 
 
 @for_all_methods(
@@ -36,10 +41,22 @@ class LivenessController:
         self.db_client = self.mongo.client
         self.db = self.db_client[self.mongo.db_name]
 
-    def get_interfaces(self) -> List[dict]:
-        """Get liveness interfaces from DB."""
+    def bootstrap_indexes(self) -> None:
+        """Bootstrap all topology related indexes."""
+        index_tuples = [
+            ("liveness", [("enabled", pymongo.ASCENDING)]),
+        ]
+        for collection, keys in index_tuples:
+            if self.mongo.bootstrap_index(collection, keys):
+                log.info(
+                    f"Created DB index {keys}, collection: {collection})"
+                )
+
+    def get_enabled_interfaces(self) -> List[dict]:
+        """Get enabled liveness interfaces from DB."""
         return self.db.liveness.aggregate(
             [
+                {"$match": {"enabled": True}},
                 {"$sort": {"_id": 1}},
                 {"$project": {"_id": 0}},
             ]
