@@ -27,6 +27,7 @@ async def test_on_ofpt_packet_in(*args):
 
     # pylint: disable=bad-option-value, import-outside-toplevel
     from napps.kytos.of_lldp.main import Main
+    Main.get_liveness_controller = MagicMock()
     topology = get_topology_mock()
     controller = get_controller_mock()
     controller.switches = topology.switches
@@ -74,7 +75,7 @@ class TestMain(TestCase):
         # pylint: disable=bad-option-value, import-outside-toplevel
         from napps.kytos.of_lldp.main import Main
         self.addCleanup(patch.stopall)
-
+        Main.get_liveness_controller = MagicMock()
         self.topology = get_topology_mock()
         controller = get_controller_mock()
         controller.switches = self.topology.switches

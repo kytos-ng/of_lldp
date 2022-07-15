@@ -37,6 +37,7 @@ class Main(KytosNApp):
         self.loop_manager = LoopManager(self.controller)
         self.dead_interval = self.polling_time * self.liveness_dead_multipler
         self.liveness_controller = self.get_liveness_controller()
+        self.liveness_controller.bootstrap_indexes()
         self.liveness_manager = LivenessManager(self.controller)
 
     @staticmethod
@@ -125,7 +126,7 @@ class Main(KytosNApp):
     def load_liveness(self) -> None:
         """Load liveness."""
         interfaces = {intf.id: intf for intf in self._get_interfaces()}
-        intfs = self.liveness_controller.get_interfaces()
+        intfs = self.liveness_controller.get_enabled_interfaces()
         self.liveness_manager.enable(*[interfaces[intf["id"]] for intf in intfs])
 
     def try_to_publish_stopped_loops(self):

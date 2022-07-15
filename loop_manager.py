@@ -69,14 +69,34 @@ class LoopManager:
                 not self.is_loop_ignored(dpid_a, port_a, port_b),
             )
         ):
-            await self.publish_loop_state(
+            await self.apublish_loop_state(
                 interface_a, interface_b, LoopState.detected.value
             )
             await self.publish_loop_actions(interface_a, interface_b)
             return True
         return False
 
-    async def publish_loop_state(
+    def publish_loop_state(
+        self,
+        interface_a,
+        interface_b,
+        state,
+    ):
+        """Publish loop state event."""
+        dpid = interface_a.switch.dpid
+        port_a = interface_a.port_number
+        port_b = interface_b.port_number
+        event = KytosEvent(
+            name=f"kytos/of_lldp.loop.{state}",
+            content={
+                "interface_id": interface_a.id,
+                "dpid": dpid,
+                "port_numbers": [port_a, port_b],
+            },
+        )
+        self.controller.buffers.app.put(event)
+
+    async def apublish_loop_state(
         self,
         interface_a,
         interface_b,
@@ -252,7 +272,7 @@ class LoopManager:
         response = self.del_interface_metadata(interface_a.id, key)
         if response.status_code != 200:
             log.error(
-                f"Failed to delete metadata key {key} on interface ",
+                f"Failed to delete metadata key {key} on interface "
                 f"{interface_a.id}",
             )
 
