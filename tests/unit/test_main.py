@@ -35,8 +35,8 @@ class TestMain(TestCase):
             interfaces += list(switch.interfaces.values())
         return interfaces
 
+    @patch('napps.kytos.of_lldp.main.of_msg_prio')
     @patch('kytos.core.buffers.KytosEventBuffer.put')
-    @patch('napps.kytos.of_lldp.main.Main._build_lldp_packet_out')
     @patch('napps.kytos.of_lldp.main.KytosEvent')
     @patch('napps.kytos.of_lldp.main.VLAN')
     @patch('napps.kytos.of_lldp.main.Ethernet')
@@ -44,8 +44,8 @@ class TestMain(TestCase):
     @patch('napps.kytos.of_lldp.main.LLDP')
     def test_execute(self, *args):
         """Test execute method."""
-        (_, _, mock_ethernet, _, mock_kytos_event, mock_build_lldp_packet_out,
-         mock_buffer_put) = args
+        (_, _, mock_ethernet, _, mock_kytos_event,
+         mock_buffer_put, mock_of_msg_prio) = args
 
         ethernet = MagicMock()
         ethernet.pack.return_value = 'pack'
@@ -60,8 +60,7 @@ class TestMain(TestCase):
         self.napp.try_to_publish_stopped_loops = mock_publish_stopped
         self.napp.execute()
 
-        mock_build_lldp_packet_out.assert_has_calls([call(*(arg))
-                                                     for arg in po_args])
+        mock_of_msg_prio.assert_called()
         mock_buffer_put.assert_has_calls([call(arg)
                                           for arg in po_args])
         mock_publish_stopped.assert_called()

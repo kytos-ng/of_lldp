@@ -108,9 +108,8 @@ class TestLoopManager(TestCase):
 
         self.loop_manager.loop_state[dpid][(1, 2)] = {"state": "detected"}
         self.loop_manager.actions = ["log", "disable"]
-        response = MagicMock()
-        response.status_code = 200
-        mock_requests.post.return_value = response
+        mock_requests.post.return_value = MagicMock(status_code=200)
+        mock_requests.delete.return_value = MagicMock(status_code=200)
         self.loop_manager.handle_loop_stopped(intf_a, intf_b)
         assert mock_requests.delete.call_count == 1
         assert mock_requests.post.call_count == 1

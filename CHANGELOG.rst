@@ -9,10 +9,12 @@ Added
 =====
 
 - Loop detection in the same switch via LLDP ``ofpt_packet_in`` supporting ``log`` and ``disable`` actions
-- Added settings for loop detection
+- Added settings for loop detection ``LLDP_LOOP_ACTIONS``, ``LLDP_IGNORED_LOOPS``, ``LLDP_LOOP_DEAD_MULTIPLIER``, ``LOOP_LOG_EVERY``
 
 Changed
 =======
+
+- KytosEvent PacketOut is now being prioritized on ``msg_out``
 
 Deprecated
 ==========
