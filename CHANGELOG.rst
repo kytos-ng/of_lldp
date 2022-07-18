@@ -14,6 +14,8 @@ Added
 Changed
 =======
 
+- KytosEvent PacketOut is now being prioritized on ``msg_out``
+
 Deprecated
 ==========
 
