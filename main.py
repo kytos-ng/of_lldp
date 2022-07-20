@@ -16,6 +16,7 @@ from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.link import Link
 from kytos.core.helpers import alisten_to, listen_to
+from napps.kytos.of_core.msg_prios import of_msg_prio
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
 from napps.kytos.of_lldp.managers import LivenessManager
@@ -102,9 +103,11 @@ class Main(KytosNApp):
 
                 event_out = KytosEvent(
                     name='kytos/of_lldp.messages.out.ofpt_packet_out',
+                    priority=of_msg_prio(packet_out.header.message_type.value),
                     content={
                             'destination': switch.connection,
                             'message': packet_out})
+
                 self.controller.buffers.msg_out.put(event_out)
                 log.debug(
                     "Sending a LLDP PacketOut to the switch %s",
