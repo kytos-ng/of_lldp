@@ -41,7 +41,7 @@ class TestILSM:
 
     def test_repr(self, ilsm) -> None:
         """Test repr."""
-        assert str(ilsm) == "ILSM(init, 1970-01-01 00:00:00)"
+        assert str(ilsm) == "ILSM(init, None)"
 
     def test_consume_hello(self, ilsm) -> None:
         """Test consume_hello."""
@@ -150,6 +150,19 @@ class TestLivenessManager:
         assert intf_one.id in liveness_manager.interfaces
         liveness_manager.disable(intf_one, intf_two)
         assert intf_one.id not in liveness_manager.interfaces
+
+    def test_link_status_hook_liveness(self, liveness_manager) -> None:
+        """Test link_status_hook_liveness."""
+        mock_link = MagicMock()
+        mock_link.is_active.return_value = True
+        mock_link.is_enabled.return_value = True
+        mock_link.metadata = {"liveness_status": "down"}
+        status = liveness_manager.link_status_hook_liveness(mock_link)
+        assert status == EntityStatus.DOWN
+
+        mock_link.metadata = {"liveness_status": "up"}
+        status = liveness_manager.link_status_hook_liveness(mock_link)
+        assert status is None
 
     def test_try_to_publish_lsm_event(
         self, liveness_manager, intf_one, intf_two

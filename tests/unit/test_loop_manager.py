@@ -17,7 +17,7 @@ async def test_publish_loop_state():
     intf_b = get_interface_mock("s1-eth2", 2, switch)
     state = "detected"
     loop_manager = LoopManager(AsyncMock())
-    await loop_manager.publish_loop_state(intf_a, intf_b, state)
+    await loop_manager.apublish_loop_state(intf_a, intf_b, state)
     assert loop_manager.controller.buffers.app.aput.call_count == 1
 
 
@@ -43,10 +43,10 @@ async def test_process_if_looped():
     loop_manager = LoopManager(AsyncMock())
     loop_manager.ignored_loops = {}
     loop_manager.publish_loop_actions = AsyncMock()
-    loop_manager.publish_loop_state = AsyncMock()
+    loop_manager.apublish_loop_state = AsyncMock()
     assert await loop_manager.process_if_looped(intf_a, intf_b)
     assert loop_manager.publish_loop_actions.call_count == 1
-    assert loop_manager.publish_loop_state.call_count == 1
+    assert loop_manager.apublish_loop_state.call_count == 1
 
 
 class TestLoopManager(TestCase):
