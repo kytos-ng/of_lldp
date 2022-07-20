@@ -1,13 +1,8 @@
 """LivenessManager."""
-import logging
-
 from typing import Optional, Tuple
 from datetime import datetime
+from kytos.core import KytosEvent, log
 from kytos.core.common import EntityStatus
-from kytos.core.events import KytosEvent
-
-# pylint: disable=invalid-name
-log = logging.getLogger("kytos.napps.kytos/of_lldp")
 
 
 class ILSM:
@@ -27,7 +22,7 @@ class ILSM:
             "down": ["up", "init"],
         }
         self.state = state
-        self.last_hello_at = datetime(year=1970, month=1, day=1)
+        self.last_hello_at: Optional[datetime] = None
 
     def __repr__(self) -> str:
         """Repr."""
@@ -42,7 +37,10 @@ class ILSM:
 
     def reaper_check(self, dead_interval: int) -> Optional[str]:
         """Try to transition to down. It must be called every dead_interval."""
-        if (datetime.utcnow() - self.last_hello_at).seconds > dead_interval:
+        if (
+            self.last_hello_at and
+            (datetime.utcnow() - self.last_hello_at).seconds > dead_interval
+        ):
             return self.transition_to("down")
         return None
 
@@ -103,6 +101,18 @@ class LivenessManager:
         self.interfaces = {}  # liveness enabled
         self.liveness = {}  # indexed by the lowest interface id of the pair
         self.liveness_ids = {}  # interface id to lowest id of the pair
+
+    @classmethod
+    def link_status_hook_liveness(cls, link) -> Optional[EntityStatus]:
+        """Link status hook liveness."""
+        if (
+            link.is_active()
+            and link.is_enabled()
+            and "liveness_status" in link.metadata
+            and link.metadata["liveness_status"] != "up"
+        ):
+            return EntityStatus.DOWN
+        return None
 
     def is_enabled(self, *interfaces) -> bool:
         """Check if liveness is enabled on an interface."""
@@ -219,7 +229,7 @@ class LivenessManager:
 
     def reaper(self, dead_interval: int):
         """Reaper check processable interfaces."""
-        for value in self.liveness.values():
+        for value in list(self.liveness.values()):
             lsm, intf_a, intf_b = (
                 value["lsm"],
                 value["interface_a"],

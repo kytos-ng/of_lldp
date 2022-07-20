@@ -14,6 +14,7 @@ from pyof.v0x04.common.port import PortNo as Port13
 from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
+from kytos.core.link import Link
 from kytos.core.helpers import alisten_to, listen_to
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
@@ -39,6 +40,8 @@ class Main(KytosNApp):
         self.liveness_controller = self.get_liveness_controller()
         self.liveness_controller.bootstrap_indexes()
         self.liveness_manager = LivenessManager(self.controller)
+        Link.register_status_func(f"{self.napp_id}_liveness",
+                                  LivenessManager.link_status_hook_liveness)
 
     @staticmethod
     def get_liveness_controller() -> LivenessController:
