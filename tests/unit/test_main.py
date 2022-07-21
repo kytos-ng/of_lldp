@@ -7,7 +7,6 @@ from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
                                get_switch_mock, get_test_client)
 
 from napps.kytos.of_lldp.utils import get_cookie
-from kytos.core.events import KytosEvent
 from tests.helpers import get_topology_mock
 
 
@@ -255,6 +254,12 @@ class TestMain(TestCase):
 
         self.assertEqual(data, interfaces)
 
+    def test_load_liveness(self) -> None:
+        """Test load_liveness."""
+        self.napp.load_liveness()
+        count = self.napp.liveness_controller.get_enabled_interfaces.call_count
+        assert count == 1
+
     def test_handle_topology_loaded(self) -> None:
         """Test handle_topology_loaded."""
         event = KytosEvent("kytos/topology.topology_loaded",
@@ -407,3 +412,51 @@ class TestMain(TestCase):
         data = {'polling_time': 'A'}
         response = api.open(url, method='POST', json=data)
         self.assertEqual(response.status_code, 400)
+
+    def test_endpoint_enable_liveness(self):
+        """Test POST v1/liveness/enable."""
+        self.napp.liveness_manager.enable = MagicMock()
+        self.napp.publish_liveness_status = MagicMock()
+        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.server_name_url}/v1/liveness/enable"
+        data = {"interfaces": ["00:00:00:00:00:00:00:01:1"]}
+        response = api.open(url, method="POST", json=data)
+        assert self.napp.liveness_controller.enable_interfaces.call_count == 1
+        assert self.napp.liveness_manager.enable.call_count == 1
+        assert self.napp.publish_liveness_status.call_count == 1
+        assert response.json == {}
+        assert response.status_code == 200
+
+    def test_endpoint_disable_liveness(self):
+        """Test POST v1/liveness/disable."""
+        self.napp.liveness_manager.disable = MagicMock()
+        self.napp.publish_liveness_status = MagicMock()
+        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.server_name_url}/v1/liveness/disable"
+        data = {"interfaces": ["00:00:00:00:00:00:00:01:1"]}
+        response = api.open(url, method='POST', json=data)
+        assert self.napp.liveness_controller.disable_interfaces.call_count == 1
+        assert self.napp.liveness_manager.disable.call_count == 1
+        assert self.napp.publish_liveness_status.call_count == 1
+        assert response.json == {}
+        assert response.status_code == 200
+
+    def test_endpoint_get_liveness(self):
+        """Test GET v1/liveness/."""
+        self.napp.liveness_manager.enable = MagicMock()
+        self.napp.publish_liveness_status = MagicMock()
+        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.server_name_url}/v1/liveness/"
+        response = api.open(url, method="GET")
+        assert response.json == {"interfaces": []}
+        assert response.status_code == 200
+
+    def test_endpoint_get_pair_liveness(self):
+        """Test GET v1/liveness//pair."""
+        self.napp.liveness_manager.enable = MagicMock()
+        self.napp.publish_liveness_status = MagicMock()
+        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.server_name_url}/v1/liveness/pair"
+        response = api.open(url, method="GET")
+        assert response.json == {"pairs": []}
+        assert response.status_code == 200
