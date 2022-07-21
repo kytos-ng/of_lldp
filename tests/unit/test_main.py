@@ -1,6 +1,7 @@
 """Test Main methods."""
 from unittest import TestCase
 from unittest.mock import MagicMock, call, patch
+from kytos.core.events import KytosEvent
 
 from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
                                get_switch_mock, get_test_client)
@@ -253,6 +254,26 @@ class TestMain(TestCase):
         data = self.napp._get_data(req)
 
         self.assertEqual(data, interfaces)
+
+    def test_handle_topology_loaded(self) -> None:
+        """Test handle_topology_loaded."""
+        event = KytosEvent("kytos/topology.topology_loaded",
+                           content={"topology": {}})
+        self.napp.load_liveness = MagicMock()
+        self.napp.loop_manager.handle_topology_loaded = MagicMock()
+        self.napp.handle_topology_loaded(event)
+        assert self.napp.loop_manager.handle_topology_loaded.call_count == 1
+        assert self.napp.load_liveness.call_count == 1
+
+    def test_publish_liveness_status(self) -> None:
+        """Test publish_liveness_status."""
+        self.napp.controller.buffers.app.put = MagicMock()
+        event_suffix, interfaces = "up", [MagicMock(id=1), MagicMock(id=2)]
+        self.napp.publish_liveness_status(event_suffix, interfaces)
+        assert self.napp.controller.buffers.app.put.call_count == 1
+        ev = self.napp.controller.buffers.app.put.call_args[0][0]
+        assert ev.name == f"kytos/of_lldp.liveness.{event_suffix}"
+        assert ev.content["interfaces"] == interfaces
 
     def test_get_interfaces(self):
         """Test _get_interfaces method."""

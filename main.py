@@ -204,6 +204,10 @@ class Main(KytosNApp):
     @listen_to("kytos/topology.topology_loaded")
     def on_topology_loaded(self, event):
         """Handle on topology loaded."""
+        self.handle_topology_loaded(event)
+
+    def handle_topology_loaded(self, event) -> None:
+        """Handle on topology loaded."""
         topology = event.content["topology"]
         self.loop_manager.handle_topology_loaded(topology)
         self.load_liveness()
