@@ -4,6 +4,7 @@ import pytest
 from napps.kytos.of_lldp.managers.liveness import ILSM
 from napps.kytos.of_lldp.managers.liveness import LSM
 from napps.kytos.of_lldp.managers.liveness import LivenessManager
+from napps.kytos.of_lldp.controllers import LivenessController
 from kytos.lib.helpers import get_switch_mock, get_interface_mock
 from unittest.mock import MagicMock
 
@@ -54,3 +55,9 @@ def intf_three(switch_two):
 def liveness_manager():
     """LivenessManager fixture."""
     return LivenessManager(MagicMock())
+
+
+@pytest.fixture
+def liveness_controller() -> None:
+    """LivenessController."""
+    return LivenessController(MagicMock())

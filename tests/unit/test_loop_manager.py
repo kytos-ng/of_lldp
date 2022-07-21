@@ -158,6 +158,16 @@ class TestLoopManager(TestCase):
         assert mock_log.info.call_count == 2
         assert self.loop_manager.loop_state[dpid][(1, 2)]["state"] == "stopped"
 
+    def test_publish_loop_state(self):
+        """Test publish_loop_state."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        intf_a = get_interface_mock("s1-eth1", 1, switch)
+        intf_b = get_interface_mock("s1-eth2", 2, switch)
+        state = "detected"
+        self.loop_manager.publish_loop_state(intf_a, intf_b, state)
+        assert self.loop_manager.controller.buffers.app.put.call_count == 1
+
     @patch(
         "napps.kytos.of_lldp.loop_manager.LoopManager.add_interface_metadata"
     )
