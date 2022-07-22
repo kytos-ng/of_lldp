@@ -15,6 +15,7 @@ Added
 - Liveness detection endpoints ``GET /v1/liveness/``, ``GET /v1/liveness/pair``
 ``POST /v1/liveness/enable``, ``POST /v1/liveness/disable``
 - Hooked link liveness status function to influence ``Link.status``
+- Added `liveness` collection to persist liveness interface configuration 
 
 Changed
 =======
