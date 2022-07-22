@@ -1,7 +1,6 @@
 """LivenessController."""
 
 # pylint: disable=invalid-name
-import logging
 import os
 from datetime import datetime
 from typing import List
@@ -11,13 +10,11 @@ from pymongo.errors import AutoReconnect
 from pymongo.operations import UpdateOne
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_random
 
+from kytos.core import log
 from kytos.core.db import Mongo
 from kytos.core.retry import before_sleep, for_all_methods, retries
 
 from ..db.models import LivenessDoc
-
-# pylint: disable=invalid-name
-log = logging.getLogger("kytos.napps.kytos/of_lldp")
 
 
 @for_all_methods(
