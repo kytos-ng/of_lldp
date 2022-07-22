@@ -1,13 +1,10 @@
 """Module to test LivenessController."""
-# pylint: disable=invalid-name,relative-beyond-top-level
+# pylint: disable=invalid-name,relative-beyond-top-level,no-self-use
 
-from datetime import datetime
-from decimal import Decimal
-from unittest import TestCase
 from unittest.mock import MagicMock
 
 
-class TestFlowController:  # pylint: disable=too-many-public-methods
+class TestLivenessController:  # pylint: disable=too-many-public-methods
     """Test the Main class."""
 
     def test_boostrap_indexes(self, liveness_controller) -> None:

@@ -1,11 +1,11 @@
 """Test Main methods."""
 from unittest import TestCase
 from unittest.mock import MagicMock, call, patch
-from kytos.core.events import KytosEvent
 
 from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
                                get_switch_mock, get_test_client)
 
+from kytos.core.events import KytosEvent
 from napps.kytos.of_lldp.utils import get_cookie
 from tests.helpers import get_topology_mock
 
@@ -23,7 +23,7 @@ async def test_on_ofpt_packet_in(*args):
     """Test on_ofpt_packet_in."""
     (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
      mock_unpack_non_empty, mock_get_switch_by_dpid,
-     mock_aput, mock_process_looped, mock_consume_hello_if_enabled) = args
+     _, mock_process_looped, mock_consume_hello_if_enabled) = args
 
     # pylint: disable=bad-option-value, import-outside-toplevel
     from napps.kytos.of_lldp.main import Main
@@ -276,9 +276,9 @@ class TestMain(TestCase):
         event_suffix, interfaces = "up", [MagicMock(id=1), MagicMock(id=2)]
         self.napp.publish_liveness_status(event_suffix, interfaces)
         assert self.napp.controller.buffers.app.put.call_count == 1
-        ev = self.napp.controller.buffers.app.put.call_args[0][0]
-        assert ev.name == f"kytos/of_lldp.liveness.{event_suffix}"
-        assert ev.content["interfaces"] == interfaces
+        event = self.napp.controller.buffers.app.put.call_args[0][0]
+        assert event.name == f"kytos/of_lldp.liveness.{event_suffix}"
+        assert event.content["interfaces"] == interfaces
 
     def test_get_interfaces(self):
         """Test _get_interfaces method."""
@@ -335,9 +335,12 @@ class TestMain(TestCase):
                                '00:00:00:00:00:00:00:03:2']}
 
         api = get_test_client(self.napp.controller, self.napp)
+        self.napp.publish_liveness_status = MagicMock()
 
         url = f'{self.server_name_url}/v1/interfaces/disable'
         disable_response = api.open(url, method='POST', json=data)
+        assert self.napp.liveness_controller.disable_interfaces.call_count == 1
+        assert self.napp.publish_liveness_status.call_count == 1
 
         url = f'{self.server_name_url}/v1/interfaces/enable'
         enable_response = api.open(url, method='POST', json=data)
@@ -372,9 +375,11 @@ class TestMain(TestCase):
                                '00:00:00:00:00:00:00:04:1']}
 
         api = get_test_client(self.napp.controller, self.napp)
+        self.napp.publish_liveness_status = MagicMock()
 
         url = f'{self.server_name_url}/v1/interfaces/disable'
         disable_response = api.open(url, method='POST', json=data)
+        assert self.napp.publish_liveness_status.call_count == 1
 
         url = f'{self.server_name_url}/v1/interfaces/enable'
         enable_response = api.open(url, method='POST', json=data)

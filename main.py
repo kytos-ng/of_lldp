@@ -14,8 +14,8 @@ from pyof.v0x04.common.port import PortNo as Port13
 from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
-from kytos.core.link import Link
 from kytos.core.helpers import alisten_to, listen_to
+from kytos.core.link import Link
 from napps.kytos.of_core.msg_prios import of_msg_prio
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
@@ -133,7 +133,8 @@ class Main(KytosNApp):
         """Load liveness."""
         interfaces = {intf.id: intf for intf in self._get_interfaces()}
         intfs = self.liveness_controller.get_enabled_interfaces()
-        self.liveness_manager.enable(*[interfaces[intf["id"]] for intf in intfs])
+        intfs_to_enable = [interfaces[intf["id"]] for intf in intfs]
+        self.liveness_manager.enable(*intfs_to_enable)
 
     def try_to_publish_stopped_loops(self):
         """Try to publish current stopped loops."""
@@ -604,6 +605,7 @@ class Main(KytosNApp):
 
     @rest("v1/liveness/pair", methods=["GET"])
     def get_liveness_interface_pairs(self):
+        """Get liveness interface pairs."""
         pairs = []
         for entry in list(self.liveness_manager.liveness.values()):
             lsm = entry["lsm"]

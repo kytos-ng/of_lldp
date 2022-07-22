@@ -1,12 +1,11 @@
 """Conftest."""
-import pytest
-
-from napps.kytos.of_lldp.managers.liveness import ILSM
-from napps.kytos.of_lldp.managers.liveness import LSM
-from napps.kytos.of_lldp.managers.liveness import LivenessManager
-from napps.kytos.of_lldp.controllers import LivenessController
-from kytos.lib.helpers import get_switch_mock, get_interface_mock
 from unittest.mock import MagicMock
+
+import pytest
+from kytos.lib.helpers import get_interface_mock, get_switch_mock
+
+from napps.kytos.of_lldp.controllers import LivenessController
+from napps.kytos.of_lldp.managers.liveness import ILSM, LSM, LivenessManager
 
 
 @pytest.fixture

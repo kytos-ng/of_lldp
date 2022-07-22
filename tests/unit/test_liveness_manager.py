@@ -1,12 +1,12 @@
 """Test LivenessManager."""
-from datetime import datetime
-from datetime import timedelta
+# pylint: disable=no-self-use,invalid-name,protected-access
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from kytos.core.common import EntityStatus
-from unittest.mock import AsyncMock, MagicMock
-from napps.kytos.of_lldp.managers.liveness import ILSM
-from napps.kytos.of_lldp.managers.liveness import LSM
+from napps.kytos.of_lldp.managers.liveness import ILSM, LSM
 
 
 class TestILSM:
@@ -85,7 +85,9 @@ class TestLSM:
             ("up", "up", "up"),
         ],
     )
-    def test_agg_state(self, ilsm_a_state, ilsm_b_state, expected, lsm) -> None:
+    def test_agg_state(
+        self, ilsm_a_state, ilsm_b_state, expected, lsm
+    ) -> None:
         """Test aggregated state."""
         lsm.ilsm_a.state, lsm.ilsm_b.state = ilsm_a_state, ilsm_b_state
         assert lsm.agg_state() == expected
@@ -169,10 +171,14 @@ class TestLivenessManager:
     ) -> None:
         """Test try_to_publish_lsm_event."""
         event_suffix = None
-        liveness_manager.try_to_publish_lsm_event(event_suffix, intf_one, intf_two)
+        liveness_manager.try_to_publish_lsm_event(
+            event_suffix, intf_one, intf_two
+        )
         assert liveness_manager.controller.buffers.app.put.call_count == 0
         event_suffix = "up"
-        liveness_manager.try_to_publish_lsm_event(event_suffix, intf_one, intf_two)
+        liveness_manager.try_to_publish_lsm_event(
+            event_suffix, intf_one, intf_two
+        )
         assert liveness_manager.controller.buffers.app.put.call_count == 1
 
     async def test_atry_to_publish_lsm_event(
@@ -195,14 +201,25 @@ class TestLivenessManager:
         self, liveness_manager, intf_one, intf_two
     ) -> None:
         """Test get_interface_status."""
-        assert liveness_manager.get_interface_status(intf_one.id) == (None, None)
+        assert liveness_manager.get_interface_status(intf_one.id) == (
+            None,
+            None,
+        )
         liveness_manager.enable(intf_one, intf_two)
-        assert liveness_manager.get_interface_status(intf_one.id) == ("init", None)
+        assert liveness_manager.get_interface_status(intf_one.id) == (
+            "init",
+            None,
+        )
         received_at = datetime.utcnow()
         await liveness_manager.consume_hello(intf_one, intf_two, received_at)
-        assert liveness_manager.get_interface_status(intf_one.id) == ("up", received_at)
+        assert liveness_manager.get_interface_status(intf_one.id) == (
+            "up",
+            received_at,
+        )
 
-    async def test_consume_hello(self, liveness_manager, intf_one, intf_two) -> None:
+    async def test_consume_hello(
+        self, liveness_manager, intf_one, intf_two
+    ) -> None:
         """Test consume_hello."""
         assert not liveness_manager.liveness
         received_at = datetime.utcnow()
@@ -279,7 +296,11 @@ class TestLivenessManager:
         """Test reaper."""
         intf_one.status, intf_two.status = EntityStatus.UP, EntityStatus.UP
         liveness_manager.liveness = {
-            intf_one.id: {"interface_a": intf_one, "interface_b": intf_two, "lsm": lsm}
+            intf_one.id: {
+                "interface_a": intf_one,
+                "interface_b": intf_two,
+                "lsm": lsm,
+            }
         }
         liveness_manager.should_call_reaper = MagicMock(return_value=True)
         liveness_manager.try_to_publish_lsm_event = MagicMock()
@@ -297,9 +318,13 @@ class TestLivenessManager:
         """Test test_consume_hello_if_enabled."""
         liveness_manager.is_enabled = MagicMock(return_value=True)
         liveness_manager.consume_hello = AsyncMock()
-        await liveness_manager.consume_hello_if_enabled(MagicMock(), MagicMock())
+        await liveness_manager.consume_hello_if_enabled(
+            MagicMock(), MagicMock()
+        )
         assert liveness_manager.consume_hello.call_count == 1
 
         liveness_manager.is_enabled = MagicMock(return_value=False)
-        await liveness_manager.consume_hello_if_enabled(MagicMock(), MagicMock())
+        await liveness_manager.consume_hello_if_enabled(
+            MagicMock(), MagicMock()
+        )
         assert liveness_manager.consume_hello.call_count == 1
