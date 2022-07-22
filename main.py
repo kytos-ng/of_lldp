@@ -477,6 +477,7 @@ class Main(KytosNApp):
         changed_interfaces = []
         interface_ids = filter(None, interface_ids)
         interfaces = self._get_interfaces()
+        intfs = []
         if not interfaces:
             return jsonify("No interfaces were found."), 404
         interfaces = self._get_interfaces_dict(interfaces)
@@ -485,10 +486,15 @@ class Main(KytosNApp):
             if interface:
                 interface.lldp = False
                 changed_interfaces.append(id_)
+                intfs.append(interface)
             else:
                 error_list.append(id_)
         if changed_interfaces:
             self.notify_lldp_change('disabled', changed_interfaces)
+            intf_ids = [intf.id for intf in intfs]
+            self.liveness_controller.disable_interfaces(intf_ids)
+            self.liveness_manager.disable(*intfs)
+            self.publish_liveness_status("disabled", intfs)
         if not error_list:
             return jsonify(
                 "All the requested interfaces have been disabled."), 200
