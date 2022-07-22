@@ -271,7 +271,7 @@ class Main(KytosNApp):
                 res = requests.delete(endpoint, json=data)
                 if res.status_code != 202:
                     log.error(f"Failed to delete flows on {destination},"
-                              f" error: {res.text}, status: {res.status_code}",
+                              f" error: {res.text}, status: {res.status_code},"
                               f" data: {data}")
                 _retry_if_status_code(res, endpoint, data, [424, 500])
 

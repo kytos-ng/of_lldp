@@ -132,6 +132,9 @@ class TestMain(TestCase):
         event_del = get_kytos_event_mock(name='kytos/topology.switch.disabled',
                                          content={'dpid': dpid})
 
+        mock_post.return_value = MagicMock(status_code=202)
+        mock_delete.return_value = MagicMock(status_code=202)
+
         self.napp._handle_lldp_flows(event_post)
         mock_post.assert_called()
 
