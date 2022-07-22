@@ -132,10 +132,10 @@ class TestMain(TestCase):
         event_del = get_kytos_event_mock(name='kytos/topology.switch.disabled',
                                          content={'dpid': dpid})
 
-        self.napp.handle_lldp_flows(event_post)
+        self.napp._handle_lldp_flows(event_post)
         mock_post.assert_called()
 
-        self.napp.handle_lldp_flows(event_del)
+        self.napp._handle_lldp_flows(event_del)
         mock_delete.assert_called()
 
     @patch("time.sleep")
