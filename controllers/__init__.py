@@ -45,9 +45,7 @@ class LivenessController:
         ]
         for collection, keys in index_tuples:
             if self.mongo.bootstrap_index(collection, keys):
-                log.info(
-                    f"Created DB index {keys}, collection: {collection})"
-                )
+                log.info(f"Created DB index {keys}, collection: {collection})")
 
     def get_enabled_interfaces(self) -> List[dict]:
         """Get enabled liveness interfaces from DB."""
@@ -60,12 +58,17 @@ class LivenessController:
         )
 
     def upsert_interfaces(
-        self, interface_ids: List[str], interface_dicts: List[dict], upsert=True
+        self,
+        interface_ids: List[str],
+        interface_dicts: List[dict],
+        upsert=True,
     ) -> int:
         """Update or insert liveness interfaces."""
         utc_now = datetime.utcnow()
         ops = []
-        for interface_id, interface_dict in zip(interface_ids, interface_dicts):
+        for interface_id, interface_dict in zip(
+            interface_ids, interface_dicts
+        ):
             model = LivenessDoc(
                 **{
                     **interface_dict,
@@ -89,11 +92,15 @@ class LivenessController:
     def enable_interfaces(self, interface_ids: List[str]) -> int:
         """Enable liveness interfaces."""
         return self.upsert_interfaces(
-            interface_ids, [{"enabled": True} for _ in interface_ids], upsert=True
+            interface_ids,
+            [{"enabled": True} for _ in interface_ids],
+            upsert=True,
         )
 
     def disable_interfaces(self, interface_ids: List[str]) -> int:
         """Disable liveness interfaces."""
         return self.upsert_interfaces(
-            interface_ids, [{"enabled": False} for _ in interface_ids], upsert=False
+            interface_ids,
+            [{"enabled": False} for _ in interface_ids],
+            upsert=False,
         )

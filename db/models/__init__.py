@@ -1,5 +1,6 @@
 """DB models."""
-# pylint: disable=unused-argument,invalid-name
+# pylint: disable=unused-argument,invalid-name,unsubscriptable-object
+# pylint: disable=no-name-in-module
 
 from datetime import datetime
 from typing import Optional
@@ -26,4 +27,5 @@ class DocumentBaseModel(BaseModel):
 
 class LivenessDoc(DocumentBaseModel):
     """Liveness document model."""
+
     enabled: bool

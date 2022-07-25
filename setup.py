@@ -130,7 +130,7 @@ class Linter(SimpleCommand):
     def run(self):
         """Run yala."""
         print('Yala is running. It may take several seconds...')
-        check_call('yala *.py tests', shell=True)
+        check_call('yala *.py controllers db tests', shell=True)
 
 
 class KytosInstall:
