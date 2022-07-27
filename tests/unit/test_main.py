@@ -5,8 +5,62 @@ from unittest.mock import MagicMock, call, patch
 from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
                                get_switch_mock, get_test_client)
 
+from kytos.core.events import KytosEvent
 from napps.kytos.of_lldp.utils import get_cookie
 from tests.helpers import get_topology_mock
+
+
+@patch('napps.kytos.of_lldp.managers.LivenessManager.consume_hello_if_enabled')
+@patch('napps.kytos.of_lldp.loop_manager.LoopManager.process_if_looped')
+@patch('kytos.core.buffers.KytosEventBuffer.aput')
+@patch('kytos.core.controller.Controller.get_switch_by_dpid')
+@patch('napps.kytos.of_lldp.main.Main._unpack_non_empty')
+@patch('napps.kytos.of_lldp.main.UBInt32')
+@patch('napps.kytos.of_lldp.main.DPID')
+@patch('napps.kytos.of_lldp.main.LLDP')
+@patch('napps.kytos.of_lldp.main.Ethernet')
+async def test_on_ofpt_packet_in(*args):
+    """Test on_ofpt_packet_in."""
+    (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
+     mock_unpack_non_empty, mock_get_switch_by_dpid,
+     _, mock_process_looped, mock_consume_hello_if_enabled) = args
+
+    # pylint: disable=bad-option-value, import-outside-toplevel
+    from napps.kytos.of_lldp.main import Main
+    Main.get_liveness_controller = MagicMock()
+    topology = get_topology_mock()
+    controller = get_controller_mock()
+    controller.switches = topology.switches
+    napp = Main(controller)
+
+    switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+    message = MagicMock(in_port=1, data='data')
+    event = KytosEvent('ofpt_packet_in', content={'source': switch.connection,
+                       'message': message})
+
+    mocked, ethernet, lldp, dpid, port_b = [MagicMock() for _ in range(5)]
+    mocked.value = 1
+    mock_ubint32.return_value = mocked
+    ethernet.ether_type = 0x88CC
+    ethernet.data = 'eth_data'
+    lldp.chassis_id.sub_value = 'chassis_id'
+    lldp.port_id.sub_value = 'port_id'
+    dpid.value = "00:00:00:00:00:00:00:02"
+    port_b.value = 2
+
+    mock_unpack_non_empty.side_effect = [ethernet, lldp, dpid, port_b]
+    mock_get_switch_by_dpid.return_value = get_switch_mock(dpid.value,
+                                                           0x04)
+    await napp.on_ofpt_packet_in(event)
+
+    calls = [call(mock_ethernet, message.data),
+             call(mock_lldp, ethernet.data),
+             call(mock_dpid, lldp.chassis_id.sub_value),
+             call(mock_ubint32, lldp.port_id.sub_value)]
+    mock_unpack_non_empty.assert_has_calls(calls)
+    mock_process_looped.assert_called()
+    assert mock_consume_hello_if_enabled.call_count == 1
+    assert controller.buffers.app.aput.call_count == 1
 
 
 # pylint: disable=protected-access,too-many-public-methods
@@ -21,7 +75,7 @@ class TestMain(TestCase):
         # pylint: disable=bad-option-value, import-outside-toplevel
         from napps.kytos.of_lldp.main import Main
         self.addCleanup(patch.stopall)
-
+        Main.get_liveness_controller = MagicMock()
         self.topology = get_topology_mock()
         controller = get_controller_mock()
         controller.switches = self.topology.switches
@@ -78,10 +132,13 @@ class TestMain(TestCase):
         event_del = get_kytos_event_mock(name='kytos/topology.switch.disabled',
                                          content={'dpid': dpid})
 
-        self.napp.handle_lldp_flows(event_post)
+        mock_post.return_value = MagicMock(status_code=202)
+        mock_delete.return_value = MagicMock(status_code=202)
+
+        self.napp._handle_lldp_flows(event_post)
         mock_post.assert_called()
 
-        self.napp.handle_lldp_flows(event_del)
+        self.napp._handle_lldp_flows(event_del)
         mock_delete.assert_called()
 
     @patch("time.sleep")
@@ -101,59 +158,6 @@ class TestMain(TestCase):
         mock_post.return_value = mock
         self.napp._handle_lldp_flows(event_post)
         self.assertTrue(mock_post.call_count, 3)
-
-    @patch('napps.kytos.of_lldp.loop_manager.LoopManager.process_if_looped')
-    @patch('kytos.core.buffers.KytosEventBuffer.put')
-    @patch('napps.kytos.of_lldp.main.KytosEvent')
-    @patch('kytos.core.controller.Controller.get_switch_by_dpid')
-    @patch('napps.kytos.of_lldp.main.Main._unpack_non_empty')
-    @patch('napps.kytos.of_lldp.main.UBInt32')
-    @patch('napps.kytos.of_lldp.main.DPID')
-    @patch('napps.kytos.of_lldp.main.LLDP')
-    @patch('napps.kytos.of_lldp.main.Ethernet')
-    def test_notify_uplink_detected(self, *args):
-        """Test notify_uplink_detected method."""
-        (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
-         mock_unpack_non_empty, mock_get_switch_by_dpid, mock_kytos_event,
-         mock_buffer_put, mock_process_looped) = args
-
-        switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
-        message = MagicMock()
-        message.in_port = 1
-        message.data = 'data'
-        event = get_kytos_event_mock(name='kytos/of_core.v0x0[14].messages.in.'
-                                          'ofpt_packet_in',
-                                     content={'source': switch.connection,
-                                              'message': message})
-
-        mocked = MagicMock()
-        mocked.value = 1
-        mock_ubint32.return_value = mocked
-        ethernet = MagicMock()
-        ethernet.ether_type = 0x88CC
-        ethernet.data = 'eth_data'
-        lldp = MagicMock()
-        lldp.chassis_id.sub_value = 'chassis_id'
-        lldp.port_id.sub_value = 'port_id'
-        dpid = MagicMock()
-        dpid.value = "00:00:00:00:00:00:00:02"
-        port_b = MagicMock()
-        port_b.value = 2
-
-        mock_unpack_non_empty.side_effect = [ethernet, lldp, dpid, port_b]
-        mock_get_switch_by_dpid.return_value = get_switch_mock(dpid.value,
-                                                               0x04)
-        mock_kytos_event.return_value = 'nni'
-
-        self.napp.notify_uplink_detected(event)
-
-        calls = [call(mock_ethernet, message.data),
-                 call(mock_lldp, ethernet.data),
-                 call(mock_dpid, lldp.chassis_id.sub_value),
-                 call(mock_ubint32, lldp.port_id.sub_value)]
-        mock_unpack_non_empty.assert_has_calls(calls)
-        mock_buffer_put.assert_called_with('nni')
-        mock_process_looped.assert_called()
 
     @patch('napps.kytos.of_lldp.main.PO13')
     @patch('napps.kytos.of_lldp.main.PO10')
@@ -253,6 +257,32 @@ class TestMain(TestCase):
 
         self.assertEqual(data, interfaces)
 
+    def test_load_liveness(self) -> None:
+        """Test load_liveness."""
+        self.napp.load_liveness()
+        count = self.napp.liveness_controller.get_enabled_interfaces.call_count
+        assert count == 1
+
+    def test_handle_topology_loaded(self) -> None:
+        """Test handle_topology_loaded."""
+        event = KytosEvent("kytos/topology.topology_loaded",
+                           content={"topology": {}})
+        self.napp.load_liveness = MagicMock()
+        self.napp.loop_manager.handle_topology_loaded = MagicMock()
+        self.napp.handle_topology_loaded(event)
+        assert self.napp.loop_manager.handle_topology_loaded.call_count == 1
+        assert self.napp.load_liveness.call_count == 1
+
+    def test_publish_liveness_status(self) -> None:
+        """Test publish_liveness_status."""
+        self.napp.controller.buffers.app.put = MagicMock()
+        event_suffix, interfaces = "up", [MagicMock(id=1), MagicMock(id=2)]
+        self.napp.publish_liveness_status(event_suffix, interfaces)
+        assert self.napp.controller.buffers.app.put.call_count == 1
+        event = self.napp.controller.buffers.app.put.call_args[0][0]
+        assert event.name == f"kytos/of_lldp.liveness.{event_suffix}"
+        assert event.content["interfaces"] == interfaces
+
     def test_get_interfaces(self):
         """Test _get_interfaces method."""
         expected_interfaces = self.get_topology_interfaces()
@@ -308,9 +338,12 @@ class TestMain(TestCase):
                                '00:00:00:00:00:00:00:03:2']}
 
         api = get_test_client(self.napp.controller, self.napp)
+        self.napp.publish_liveness_status = MagicMock()
 
         url = f'{self.server_name_url}/v1/interfaces/disable'
         disable_response = api.open(url, method='POST', json=data)
+        assert self.napp.liveness_controller.disable_interfaces.call_count == 1
+        assert self.napp.publish_liveness_status.call_count == 1
 
         url = f'{self.server_name_url}/v1/interfaces/enable'
         enable_response = api.open(url, method='POST', json=data)
@@ -345,9 +378,11 @@ class TestMain(TestCase):
                                '00:00:00:00:00:00:00:04:1']}
 
         api = get_test_client(self.napp.controller, self.napp)
+        self.napp.publish_liveness_status = MagicMock()
 
         url = f'{self.server_name_url}/v1/interfaces/disable'
         disable_response = api.open(url, method='POST', json=data)
+        assert self.napp.publish_liveness_status.call_count == 1
 
         url = f'{self.server_name_url}/v1/interfaces/enable'
         enable_response = api.open(url, method='POST', json=data)
@@ -385,3 +420,51 @@ class TestMain(TestCase):
         data = {'polling_time': 'A'}
         response = api.open(url, method='POST', json=data)
         self.assertEqual(response.status_code, 400)
+
+    def test_endpoint_enable_liveness(self):
+        """Test POST v1/liveness/enable."""
+        self.napp.liveness_manager.enable = MagicMock()
+        self.napp.publish_liveness_status = MagicMock()
+        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.server_name_url}/v1/liveness/enable"
+        data = {"interfaces": ["00:00:00:00:00:00:00:01:1"]}
+        response = api.open(url, method="POST", json=data)
+        assert self.napp.liveness_controller.enable_interfaces.call_count == 1
+        assert self.napp.liveness_manager.enable.call_count == 1
+        assert self.napp.publish_liveness_status.call_count == 1
+        assert response.json == {}
+        assert response.status_code == 200
+
+    def test_endpoint_disable_liveness(self):
+        """Test POST v1/liveness/disable."""
+        self.napp.liveness_manager.disable = MagicMock()
+        self.napp.publish_liveness_status = MagicMock()
+        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.server_name_url}/v1/liveness/disable"
+        data = {"interfaces": ["00:00:00:00:00:00:00:01:1"]}
+        response = api.open(url, method='POST', json=data)
+        assert self.napp.liveness_controller.disable_interfaces.call_count == 1
+        assert self.napp.liveness_manager.disable.call_count == 1
+        assert self.napp.publish_liveness_status.call_count == 1
+        assert response.json == {}
+        assert response.status_code == 200
+
+    def test_endpoint_get_liveness(self):
+        """Test GET v1/liveness/."""
+        self.napp.liveness_manager.enable = MagicMock()
+        self.napp.publish_liveness_status = MagicMock()
+        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.server_name_url}/v1/liveness/"
+        response = api.open(url, method="GET")
+        assert response.json == {"interfaces": []}
+        assert response.status_code == 200
+
+    def test_endpoint_get_pair_liveness(self):
+        """Test GET v1/liveness//pair."""
+        self.napp.liveness_manager.enable = MagicMock()
+        self.napp.publish_liveness_status = MagicMock()
+        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.server_name_url}/v1/liveness/pair"
+        response = api.open(url, method="GET")
+        assert response.json == {"pairs": []}
+        assert response.status_code == 200

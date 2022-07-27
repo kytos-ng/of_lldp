@@ -54,7 +54,7 @@ class LoopManager:
             return True
         return False
 
-    def process_if_looped(
+    async def process_if_looped(
         self,
         interface_a,
         interface_b,
@@ -70,10 +70,10 @@ class LoopManager:
                 not self.is_loop_ignored(dpid_a, port_a, port_b),
             )
         ):
-            self.publish_loop_state(
+            await self.apublish_loop_state(
                 interface_a, interface_b, LoopState.detected.value
             )
-            self.publish_loop_actions(interface_a, interface_b)
+            await self.publish_loop_actions(interface_a, interface_b)
             return True
         return False
 
@@ -97,7 +97,27 @@ class LoopManager:
         )
         self.controller.buffers.app.put(event)
 
-    def publish_loop_actions(
+    async def apublish_loop_state(
+        self,
+        interface_a,
+        interface_b,
+        state,
+    ):
+        """Publish loop state event."""
+        dpid = interface_a.switch.dpid
+        port_a = interface_a.port_number
+        port_b = interface_b.port_number
+        event = KytosEvent(
+            name=f"kytos/of_lldp.loop.{state}",
+            content={
+                "interface_id": interface_a.id,
+                "dpid": dpid,
+                "port_numbers": [port_a, port_b],
+            },
+        )
+        await self.controller.buffers.app.aput(event)
+
+    async def publish_loop_actions(
         self,
         interface_a,
         interface_b,
@@ -112,7 +132,7 @@ class LoopManager:
                     "interface_b": interface_b,
                 },
             )
-            self.controller.buffers.app.put(event)
+            await self.controller.buffers.app.aput(event)
 
     def handle_loop_detected(self, interface_id, dpid, port_pair):
         """Handle loop detected."""

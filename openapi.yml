@@ -76,6 +76,82 @@ paths:
         '400':
           description: Some interfaces have not been disabled.
 
+  /v1/liveness/enable/:
+    post:
+      summary: Enable Link Livenes
+      description: Enable liveness
+      operationId: enable_liveness
+      requestBody:
+        description: Enable liveness
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Lista'
+            example:          
+                interfaces: ["00:00:00:00:00:00:00:01:1","00:00:00:00:00:00:00:02:1"]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid payload.
+        '404':
+          description: Interface not found.
+
+  /v1/liveness/disable/:
+    post:
+      summary: Disable Link Livenes
+      description: Disable liveness
+      operationId: disable_liveness
+      requestBody:
+        description: Disable liveness
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Lista'
+            example:          
+                interfaces: ["00:00:00:00:00:00:00:01:1","00:00:00:00:00:00:00:02:1"]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid payload.
+        '404':
+          description: Interface not found.
+
+  /v1/liveness/:
+    get:
+      summary: Get liveness interfaces status
+      description: Get liveness interface status
+      operationId: get_liveness_interfaces
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessInterfaces'
+
+  /v1/liveness/pair:
+    get:
+      summary: Get liveness interfaces pairs status
+      description: Get liveness interfaces pairs status
+      operationId: get_liveness_pairs
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessInterfacesPairs'
+
   /v1/polling_time:
     get:
       summary: Get LLDP Polling time.
@@ -125,3 +201,37 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Lista'
+    LivenessInterface:
+      type: object
+      properties:
+        id:
+          type: string
+        last_hello_at: 
+          type: string
+        status:
+          type: string
+    LivenessInterfaces:
+      type: object
+      properties:
+        interfaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/LivenessInterface'
+    LivenessInterfacesPair:
+      type: object
+      properties:
+        interface_a:
+          type: object
+          $ref: '#/components/schemas/LivenessInterface'
+        interface_b:
+          type: object
+          $ref: '#/components/schemas/LivenessInterface'
+        status:
+          type: string
+    LivenessInterfacesPairs:
+      type: object
+      properties:
+        pairs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LivenessInterfacesPair'

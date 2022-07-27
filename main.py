@@ -14,11 +14,15 @@ from pyof.v0x04.common.port import PortNo as Port13
 from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
-from kytos.core.helpers import listen_to
+from kytos.core.helpers import alisten_to, listen_to
+from kytos.core.link import Link
 from napps.kytos.of_core.msg_prios import of_msg_prio
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
+from napps.kytos.of_lldp.managers import LivenessManager
 from napps.kytos.of_lldp.utils import get_cookie
+
+from .controllers import LivenessController
 
 
 class Main(KytosNApp):
@@ -30,8 +34,20 @@ class Main(KytosNApp):
         self.polling_time = settings.POLLING_TIME
         if hasattr(settings, "FLOW_VLAN_VID"):
             self.vlan_id = settings.FLOW_VLAN_VID
+        self.liveness_dead_multipler = settings.LIVENESS_DEAD_MULTIPLIER
         self.execute_as_loop(self.polling_time)
         self.loop_manager = LoopManager(self.controller)
+        self.dead_interval = self.polling_time * self.liveness_dead_multipler
+        self.liveness_controller = self.get_liveness_controller()
+        self.liveness_controller.bootstrap_indexes()
+        self.liveness_manager = LivenessManager(self.controller)
+        Link.register_status_func(f"{self.napp_id}_liveness",
+                                  LivenessManager.link_status_hook_liveness)
+
+    @staticmethod
+    def get_liveness_controller() -> LivenessController:
+        """Get LivenessController."""
+        return LivenessController()
 
     def execute(self):
         """Send LLDP Packets every 'POLLING_TIME' seconds to all switches."""
@@ -111,6 +127,14 @@ class Main(KytosNApp):
                     switch.dpid, interface.port_number)
 
         self.try_to_publish_stopped_loops()
+        self.liveness_manager.reaper(self.dead_interval)
+
+    def load_liveness(self) -> None:
+        """Load liveness."""
+        interfaces = {intf.id: intf for intf in self._get_interfaces()}
+        intfs = self.liveness_controller.get_enabled_interfaces()
+        intfs_to_enable = [interfaces[intf["id"]] for intf in intfs]
+        self.liveness_manager.enable(*intfs_to_enable)
 
     def try_to_publish_stopped_loops(self):
         """Try to publish current stopped loops."""
@@ -181,8 +205,13 @@ class Main(KytosNApp):
     @listen_to("kytos/topology.topology_loaded")
     def on_topology_loaded(self, event):
         """Handle on topology loaded."""
+        self.handle_topology_loaded(event)
+
+    def handle_topology_loaded(self, event) -> None:
+        """Handle on topology loaded."""
         topology = event.content["topology"]
         self.loop_manager.handle_topology_loaded(topology)
+        self.load_liveness()
 
     @listen_to("kytos/topology.switches.metadata.(added|removed)")
     def on_switches_metadata_changed(self, event):
@@ -242,22 +271,12 @@ class Main(KytosNApp):
                 res = requests.delete(endpoint, json=data)
                 if res.status_code != 202:
                     log.error(f"Failed to delete flows on {destination},"
-                              f" error: {res.text}, status: {res.status_code}",
+                              f" error: {res.text}, status: {res.status_code},"
                               f" data: {data}")
                 _retry_if_status_code(res, endpoint, data, [424, 500])
 
-    @listen_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
-    def on_ofpt_packet_in(self, event):
-        """Dispatch two KytosEvents to notify identified NNI interfaces.
-
-        Args:
-            event (:class:`~kytos.core.events.KytosEvent`):
-                Event with an LLDP packet as data.
-
-        """
-        self.notify_uplink_detected(event)
-
-    def notify_uplink_detected(self, event):
+    @alisten_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
+    async def on_ofpt_packet_in(self, event):
         """Dispatch two KytosEvents to notify identified NNI interfaces.
 
         Args:
@@ -302,11 +321,13 @@ class Main(KytosNApp):
             interface_a = switch_a.get_interface_by_port_no(port_a.value)
             interface_b = switch_b.get_interface_by_port_no(port_b.value)
 
-            self.loop_manager.process_if_looped(interface_a, interface_b)
+            await self.loop_manager.process_if_looped(interface_a, interface_b)
+            await self.liveness_manager.consume_hello_if_enabled(interface_a,
+                                                                 interface_b)
             event_out = KytosEvent(name='kytos/of_lldp.interface.is.nni',
                                    content={'interface_a': interface_a,
                                             'interface_b': interface_b})
-            self.controller.buffers.app.put(event_out)
+            await self.controller.buffers.app.aput(event_out)
 
     def notify_lldp_change(self, state, interface_ids):
         """Dispatch a KytosEvent to notify changes to the LLDP status."""
@@ -315,6 +336,13 @@ class Main(KytosNApp):
                    'interface_ids': interface_ids}
         event_out = KytosEvent(name='kytos/of_lldp.network_status.updated',
                                content=content)
+        self.controller.buffers.app.put(event_out)
+
+    def publish_liveness_status(self, event_suffix, interfaces):
+        """Dispatch a KytosEvent to publish liveness admin status."""
+        content = {"interfaces": interfaces}
+        name = f"kytos/of_lldp.liveness.{event_suffix}"
+        event_out = KytosEvent(name=name, content=content)
         self.controller.buffers.app.put(event_out)
 
     def shutdown(self):
@@ -450,6 +478,7 @@ class Main(KytosNApp):
         changed_interfaces = []
         interface_ids = filter(None, interface_ids)
         interfaces = self._get_interfaces()
+        intfs = []
         if not interfaces:
             return jsonify("No interfaces were found."), 404
         interfaces = self._get_interfaces_dict(interfaces)
@@ -458,10 +487,15 @@ class Main(KytosNApp):
             if interface:
                 interface.lldp = False
                 changed_interfaces.append(id_)
+                intfs.append(interface)
             else:
                 error_list.append(id_)
         if changed_interfaces:
             self.notify_lldp_change('disabled', changed_interfaces)
+            intf_ids = [intf.id for intf in intfs]
+            self.liveness_controller.disable_interfaces(intf_ids)
+            self.liveness_manager.disable(*intfs)
+            self.publish_liveness_status("disabled", intfs)
         if not error_list:
             return jsonify(
                 "All the requested interfaces have been disabled."), 200
@@ -499,6 +533,97 @@ class Main(KytosNApp):
         msg_error = "Some interfaces couldn't be found and activated: "
         return jsonify({msg_error:
                         error_list}), 400
+
+    @rest("v1/liveness/enable", methods=["POST"])
+    def enable_liveness(self):
+        """Enable liveness link detection on interfaces."""
+        intf_ids = self._get_data(request)
+        if not intf_ids:
+            return jsonify("Interfaces payload is empty"), 400
+        interfaces = {intf.id: intf for intf in self._get_interfaces()}
+        diff = set(intf_ids) - set(interfaces.keys())
+        if diff:
+            return jsonify(f"Interface IDs {diff} not found"), 404
+
+        intfs = [interfaces[_id] for _id in intf_ids]
+        non_lldp = [intf.id for intf in intfs if not intf.lldp]
+        if non_lldp:
+            msg = f"Interface IDs {non_lldp} don't have LLDP enabled"
+            return jsonify(msg), 400
+        self.liveness_controller.enable_interfaces(intf_ids)
+        self.liveness_manager.enable(*intfs)
+        self.publish_liveness_status("enabled", intfs)
+        return jsonify(), 200
+
+    @rest("v1/liveness/disable", methods=["POST"])
+    def disable_liveness(self):
+        """Disable liveness link detection on interfaces."""
+        intf_ids = self._get_data(request)
+        if not intf_ids:
+            return jsonify("Interfaces payload is empty"), 400
+
+        interfaces = {intf.id: intf for intf in self._get_interfaces()}
+        diff = set(intf_ids) - set(interfaces.keys())
+        if diff:
+            return jsonify(f"Interface IDs {diff} not found"), 404
+
+        intfs = [interfaces[_id] for _id in intf_ids if _id in interfaces]
+        self.liveness_controller.disable_interfaces(intf_ids)
+        self.liveness_manager.disable(*intfs)
+        self.publish_liveness_status("disabled", intfs)
+        return jsonify(), 200
+
+    @rest("v1/liveness/", methods=["GET"])
+    def get_liveness_interfaces(self):
+        """Get liveness interfaces."""
+        args = request.args
+        interface_id = args.get("interface_id")
+        if interface_id:
+            status, last_hello_at = self.liveness_manager.get_interface_status(
+                interface_id
+            )
+            if not status:
+                return {"interfaces": []}, 200
+            body = {
+                "interfaces": [
+                    {
+                        "id": interface_id,
+                        "status": status,
+                        "last_hello_at": last_hello_at,
+                    }
+                ]
+            }
+            return jsonify(body), 200
+        interfaces = []
+        for interface_id in list(self.liveness_manager.interfaces.keys()):
+            status, last_hello_at = self.liveness_manager.get_interface_status(
+                interface_id
+            )
+            interfaces.append({"id": interface_id, "status": status,
+                              "last_hello_at": last_hello_at})
+        return jsonify({"interfaces": interfaces}), 200
+
+    @rest("v1/liveness/pair", methods=["GET"])
+    def get_liveness_interface_pairs(self):
+        """Get liveness interface pairs."""
+        pairs = []
+        for entry in list(self.liveness_manager.liveness.values()):
+            lsm = entry["lsm"]
+            pair = {
+                "interface_a": {
+                    "id": entry["interface_a"].id,
+                    "status": lsm.ilsm_a.state,
+                    "last_hello_at": lsm.ilsm_a.last_hello_at,
+                },
+                "interface_b": {
+                    "id": entry["interface_b"].id,
+                    "status": lsm.ilsm_b.state,
+                    "last_hello_at": lsm.ilsm_b.last_hello_at,
+                },
+                "status": lsm.state
+            }
+            pairs.append(pair)
+        return jsonify({"pairs": pairs})
 
     @rest('v1/polling_time', methods=['GET'])
     def get_time(self):
