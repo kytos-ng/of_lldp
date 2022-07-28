@@ -18,8 +18,8 @@ from kytos.core.helpers import alisten_to, listen_to
 from kytos.core.link import Link
 from napps.kytos.of_core.msg_prios import of_msg_prio
 from napps.kytos.of_lldp import constants, settings
-from napps.kytos.of_lldp.loop_manager import LoopManager, LoopState
-from napps.kytos.of_lldp.managers import LivenessManager
+from napps.kytos.of_lldp.managers import LivenessManager, LoopManager
+from napps.kytos.of_lldp.managers.loop_manager import LoopState
 from napps.kytos.of_lldp.utils import get_cookie
 
 from .controllers import LivenessController
