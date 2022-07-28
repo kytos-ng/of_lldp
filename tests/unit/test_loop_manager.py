@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from kytos.lib.helpers import get_interface_mock, get_switch_mock
 
 from kytos.core.helpers import now
-from napps.kytos.of_lldp.loop_manager import LoopManager
+from napps.kytos.of_lldp.managers.loop_manager import LoopManager
 
 
 async def test_publish_loop_state():
@@ -103,7 +103,7 @@ class TestLoopManager(TestCase):
         dpid = "00:00:00:00:00:00:00:02"
         assert not self.loop_manager.is_loop_ignored(dpid, port_a, port_b)
 
-    @patch("napps.kytos.of_lldp.loop_manager.log")
+    @patch("napps.kytos.of_lldp.managers.loop_manager.log")
     def test_handle_log_action(self, mock_log):
         """Test handle_log_action."""
 
@@ -119,8 +119,8 @@ class TestLoopManager(TestCase):
         mock_log.warning.call_count = 1
         assert self.loop_manager.loop_counter[dpid][(1, 2)] == 1
 
-    @patch("napps.kytos.of_lldp.loop_manager.requests")
-    @patch("napps.kytos.of_lldp.loop_manager.log")
+    @patch("napps.kytos.of_lldp.managers.loop_manager.requests")
+    @patch("napps.kytos.of_lldp.managers.loop_manager.log")
     def test_handle_disable_action(self, mock_log, mock_requests):
         """Test handle_disable_action."""
 
@@ -136,8 +136,8 @@ class TestLoopManager(TestCase):
         assert mock_requests.post.call_count == 1
         assert mock_log.info.call_count == 1
 
-    @patch("napps.kytos.of_lldp.loop_manager.requests")
-    @patch("napps.kytos.of_lldp.loop_manager.log")
+    @patch("napps.kytos.of_lldp.managers.loop_manager.requests")
+    @patch("napps.kytos.of_lldp.managers.loop_manager.log")
     def test_handle_loop_stopped(self, mock_log, mock_requests):
         """Test handle_loop_stopped."""
 
@@ -168,12 +168,10 @@ class TestLoopManager(TestCase):
         self.loop_manager.publish_loop_state(intf_a, intf_b, state)
         assert self.loop_manager.controller.buffers.app.put.call_count == 1
 
-    @patch(
-        "napps.kytos.of_lldp.loop_manager.LoopManager.add_interface_metadata"
-    )
-    def test_handle_loop_detected(self, mock_add_interface_metadata):
+    def test_handle_loop_detected(self):
         """Test handle_loop_detected."""
-
+        mock_add_interface_metadata = MagicMock()
+        self.loop_manager.add_interface_metadata = mock_add_interface_metadata
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock(dpid, 0x04)
         intf_a = get_interface_mock("s1-eth1", 1, switch)
@@ -195,7 +193,7 @@ class TestLoopManager(TestCase):
         self.loop_manager.handle_loop_detected(intf_a.id, dpid, port_pair)
         assert mock_add_interface_metadata.call_count == 2
 
-    @patch("napps.kytos.of_lldp.loop_manager.requests")
+    @patch("napps.kytos.of_lldp.managers.loop_manager.requests")
     def test_add_interface_metadata(self, mock_requests):
         """Test add interface metadata."""
         dpid = "00:00:00:00:00:00:00:01"
@@ -210,7 +208,7 @@ class TestLoopManager(TestCase):
         self.loop_manager.add_interface_metadata(intf_a.id, metadata)
         assert mock_requests.post.call_count == 1
 
-    @patch("napps.kytos.of_lldp.loop_manager.requests")
+    @patch("napps.kytos.of_lldp.managers.loop_manager.requests")
     def test_del_interface_metadata(self, mock_requests):
         """Test del interface metadata."""
         dpid = "00:00:00:00:00:00:00:01"

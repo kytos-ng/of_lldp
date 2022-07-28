@@ -1,6 +1,6 @@
 """Test Main methods."""
 from unittest import TestCase
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
                                get_switch_mock, get_test_client)
@@ -10,8 +10,6 @@ from napps.kytos.of_lldp.utils import get_cookie
 from tests.helpers import get_topology_mock
 
 
-@patch('napps.kytos.of_lldp.managers.LivenessManager.consume_hello_if_enabled')
-@patch('napps.kytos.of_lldp.loop_manager.LoopManager.process_if_looped')
 @patch('kytos.core.buffers.KytosEventBuffer.aput')
 @patch('kytos.core.controller.Controller.get_switch_by_dpid')
 @patch('napps.kytos.of_lldp.main.Main._unpack_non_empty')
@@ -22,8 +20,7 @@ from tests.helpers import get_topology_mock
 async def test_on_ofpt_packet_in(*args):
     """Test on_ofpt_packet_in."""
     (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
-     mock_unpack_non_empty, mock_get_switch_by_dpid,
-     _, mock_process_looped, mock_consume_hello_if_enabled) = args
+     mock_unpack_non_empty, mock_get_switch_by_dpid, _) = args
 
     # pylint: disable=bad-option-value, import-outside-toplevel
     from napps.kytos.of_lldp.main import Main
@@ -32,6 +29,8 @@ async def test_on_ofpt_packet_in(*args):
     controller = get_controller_mock()
     controller.switches = topology.switches
     napp = Main(controller)
+    napp.loop_manager.process_if_looped = AsyncMock()
+    napp.liveness_manager.consume_hello_if_enabled = AsyncMock()
 
     switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
     message = MagicMock(in_port=1, data='data')
@@ -58,8 +57,8 @@ async def test_on_ofpt_packet_in(*args):
              call(mock_dpid, lldp.chassis_id.sub_value),
              call(mock_ubint32, lldp.port_id.sub_value)]
     mock_unpack_non_empty.assert_has_calls(calls)
-    mock_process_looped.assert_called()
-    assert mock_consume_hello_if_enabled.call_count == 1
+    assert napp.loop_manager.process_if_looped.call_count == 1
+    assert napp.liveness_manager.consume_hello_if_enabled.call_count == 1
     assert controller.buffers.app.aput.call_count == 1
 
 
