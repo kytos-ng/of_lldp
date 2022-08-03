@@ -5,7 +5,7 @@
   <div align="center">
     <h1><code>kytos/of_lldp</code></h1>
 
-    <strong>NApp responsible for network link discovery through LLDP</strong>
+    <strong>LLDP OpenFlow NApp</strong>
 
     <h3><a href="https://kytos-ng.github.io/api/of_lldp.html">OpenAPI Docs</a></h3>
   </div>
@@ -13,10 +13,19 @@
 Overview
 ========
 
-This NApp implements the Link Layer Discovery Protocol (LLDP).
+This NApp implements the Link Layer Discovery Protocol (LLDP). 
 
-How it Works
-============
+Features
+========
+
+This NApps is responsible for providing these major features:
+
+- Link discovery
+- Link liveness detection
+- Interface loop detection
+
+Link discovery
+==============
 
 In order to track connections between switches under the present SDN
 controller, this NAPP uses the LLDP protocol with the following procedure:
@@ -27,8 +36,8 @@ controller, this NAPP uses the LLDP protocol with the following procedure:
    PacketOut, by carrying the switch DPID and the Port that it will be forwarded
    through.
 
-2. The switches forward the packet throught the given Port and, if another
-   switch is connected to that port, it will have a flow (preinstalled by the
+2. The switches forward the packet through the given Port and, if another
+   switch is connected to that port, it will have a flow (pre-installed by the
    NApp) instructing it to send it back to the controller. So, it will generate
    a ``PacketIn`` with that Ethernet packet to the controller.
 
@@ -44,6 +53,20 @@ This protocol is vendor free and used to discover network devices and all links
 between them. This protocol is implemented at layer 2 (L2) and defined in the
 IEEE 802.1ab. A network management system (NMS) can rapidly obtain the L2
 network topology and topology changes over time using LLDP.
+
+Link liveness detection
+=======================
+
+Link liveness detection via LLDP leverages the existing link discovery messages to provide 
+this functionality. Link liveness detection is enabled per interface and it needs to be
+enabled on each pair to work. This implementation is meant to be a generic alternative
+to BFD (Bidirectional Forwarding Detection - RFC 5880) where the protocol states is 
+being tracked by the control plane. For more information, check out `EP030 <https://github.com/kytos-ng/kytos/blob/master/docs/blueprints/EP030.rst>`_.
+
+Interface loop detection
+========================
+
+Interface loop detection is a mechanism to detect if an interface of a switch is looped, this feature uses the existing LLDP messages. This feature is enabled by default once LLDP is enabled, but interfaces that have intentional loops can be configured to be ignored. By default, once a loop is detected, it'll generate a log warning message, additional actions such as disable can also be configured. For more information, check out `EP025 <https://github.com/kytos-ng/kytos/blob/master/docs/blueprints/EP025.rst>`_.
 
 
 Installing
@@ -152,6 +175,70 @@ Content:
      'dpid': <str>,
      'interface_id': <str>,
      'port_numbers': [<int>, <int>],
+   }
+
+
+kytos/of_lldp.liveness.up
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*buffer*: ``app``
+
+Event reporting that link liveness is up
+
+Content:
+
+.. code-block:: python3
+
+   {
+     "interface_a": <Interface obj>
+     "interface_b": <Interface obj>
+   }
+
+kytos/of_lldp.liveness.down
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*buffer*: ``app``
+
+Event reporting that link liveness is down
+
+Content:
+
+.. code-block:: python3
+
+   {
+     "interface_a": <Interface obj>
+     "interface_b": <Interface obj>
+   }
+
+
+kytos/of_lldp.liveness.enabled
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*buffer*: ``app``
+
+Event reporting that liveness has been enabled on interfaces
+
+Content:
+
+.. code-block:: python3
+
+   {
+     "interfaces": [<Interface obj>]
+   }
+
+kytos/of_lldp.liveness.disabled
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*buffer*: ``app``
+
+Event reporting that liveness has been disabled on interfaces
+
+Content:
+
+.. code-block:: python3
+
+   {
+     "interfaces": [<Interface obj>]
    }
 
 
