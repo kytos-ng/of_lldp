@@ -8,18 +8,8 @@ All notable changes to the of_lldp NApp will be documented in this file.
 Added
 =====
 
-- Loop detection in the same switch via LLDP ``ofpt_packet_in`` supporting ``log`` and ``disable`` actions
-- Added settings for loop detection ``LLDP_LOOP_ACTIONS``, ``LLDP_IGNORED_LOOPS``, ``LLDP_LOOP_DEAD_MULTIPLIER``, ``LOOP_LOG_EVERY``
-- Link liveness detection via LLDP
-- Added settings for link liveness detection ``LIVENESS_DEAD_MULTIPLIER``
-- Liveness detection endpoints ``GET /v1/liveness/``, ``GET /v1/liveness/pair``, ``POST /v1/liveness/enable``, ``POST /v1/liveness/disable``
-- Hooked link liveness status function to influence ``Link.status``
-- Added `liveness` collection to persist liveness interface configuration 
-
 Changed
 =======
-
-- KytosEvent PacketOut is now being prioritized on ``msg_out``
 
 Deprecated
 ==========
@@ -33,6 +23,24 @@ Fixed
 Security
 ========
 
+[2022.2.0] - 2022-08-05
+***********************
+
+Added
+=====
+
+- Loop detection in the same switch via LLDP ``ofpt_packet_in`` supporting ``log`` and ``disable`` actions
+- Added settings for loop detection ``LLDP_LOOP_ACTIONS``, ``LLDP_IGNORED_LOOPS``, ``LLDP_LOOP_DEAD_MULTIPLIER``, ``LOOP_LOG_EVERY``
+- Link liveness detection via LLDP
+- Added settings for link liveness detection ``LIVENESS_DEAD_MULTIPLIER``
+- Liveness detection endpoints ``GET /v1/liveness/``, ``GET /v1/liveness/pair``, ``POST /v1/liveness/enable``, ``POST /v1/liveness/disable``
+- Hooked link liveness status function to influence ``Link.status``
+- Added `liveness` collection to persist liveness interface configuration 
+
+Changed
+=======
+
+- KytosEvent PacketOut is now being prioritized on ``msg_out``
 
 [2022.1.0] - 2022-02-02
 ***********************
