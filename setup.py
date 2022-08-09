@@ -3,6 +3,7 @@
 Run "python3 setup.py --help-commands" to list all available commands and their
 descriptions.
 """
+import json
 import os
 import shutil
 import sys
@@ -22,7 +23,6 @@ if 'bdist_wheel' in sys.argv:
 BASE_ENV = Path(os.environ.get('VIRTUAL_ENV', '/'))
 
 NAPP_NAME = 'of_lldp'
-NAPP_VERSION = '2022.1.0'
 
 # Kytos var folder
 VAR_PATH = BASE_ENV / 'var' / 'lib' / 'kytos'
@@ -230,6 +230,13 @@ def symlink_if_different(path, target):
         path.symlink_to(target)
 
 
+def read_version_from_json():
+    """Read the NApp version from NApp kytos.json file."""
+    file = Path('kytos.json')
+    metadata = json.loads(file.read_text())
+    return metadata['version']
+
+
 def read_requirements(path="requirements/run.txt"):
     """Read requirements file and return a list."""
     with open(path, "r", encoding="utf8") as file:
@@ -241,7 +248,7 @@ def read_requirements(path="requirements/run.txt"):
 
 
 setup(name=f'kytos_{NAPP_NAME}',
-      version=NAPP_VERSION,
+      version=read_version_from_json(),
       description='Core NApps developed by the Kytos Team',
       url=f'http://github.com/kytos/{NAPP_NAME}',
       author='Kytos Team',
