@@ -1,5 +1,5 @@
 """Test LivenessManager."""
-# pylint: disable=no-self-use,invalid-name,protected-access
+# pylint: disable=invalid-name,protected-access
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 

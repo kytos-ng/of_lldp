@@ -1,5 +1,5 @@
 """Module to test LivenessController."""
-# pylint: disable=invalid-name,relative-beyond-top-level,no-self-use
+# pylint: disable=invalid-name,relative-beyond-top-level
 
 from unittest.mock import MagicMock
 
