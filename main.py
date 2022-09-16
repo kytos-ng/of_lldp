@@ -4,11 +4,8 @@ import time
 
 import requests
 from flask import jsonify, request
-from pyof.foundation.basic_types import DPID, UBInt16, UBInt32
+from pyof.foundation.basic_types import DPID, UBInt32
 from pyof.foundation.network_types import LLDP, VLAN, Ethernet, EtherType
-from pyof.v0x01.common.action import ActionOutput as AO10
-from pyof.v0x01.common.phy_port import Port as Port10
-from pyof.v0x01.controller2switch.packet_out import PacketOut as PO10
 from pyof.v0x04.common.action import ActionOutput as AO13
 from pyof.v0x04.common.port import PortNo as Port13
 from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
@@ -61,10 +58,7 @@ class Main(KytosNApp):
             if not switch.is_connected():
                 continue
 
-            if of_version == 0x01:
-                port_type = UBInt16
-                local_port = Port10.OFPP_LOCAL
-            elif of_version == 0x04:
+            if of_version == 0x04:
                 port_type = UBInt32
                 local_port = Port13.OFPP_LOCAL
             else:
@@ -275,7 +269,7 @@ class Main(KytosNApp):
                               f" data: {data}")
                 _retry_if_status_code(res, endpoint, data, [424, 500])
 
-    @alisten_to('kytos/of_core.v0x0[14].messages.in.ofpt_packet_in')
+    @alisten_to('kytos/of_core.v0x04.messages.in.ofpt_packet_in')
     async def on_ofpt_packet_in(self, event):
         """Dispatch two KytosEvents to notify identified NNI interfaces.
 
@@ -301,14 +295,13 @@ class Main(KytosNApp):
             switch_b = None
             port_b = None
 
-            # in_port is currently a UBInt16 in v0x01 and an Int in v0x04.
+            # in_port is currently an Int in v0x04.
             if isinstance(port_a, int):
                 port_a = UBInt32(port_a)
 
             try:
                 switch_b = self.controller.get_switch_by_dpid(dpid.value)
-                of_version = switch_b.connection.protocol.version
-                port_type = UBInt16 if of_version == 0x01 else UBInt32
+                port_type = UBInt32
                 port_b = self._unpack_non_empty(port_type,
                                                 lldp.port_id.sub_value)
             except AttributeError:
@@ -365,10 +358,7 @@ class Main(KytosNApp):
             None if the OpenFlow version is not supported.
 
         """
-        if version == 0x01:
-            action_output_class = AO10
-            packet_out_class = PO10
-        elif version == 0x04:
+        if version == 0x04:
             action_output_class = AO13
             packet_out_class = PO13
         else:
@@ -408,10 +398,7 @@ class Main(KytosNApp):
             match['dl_vlan'] = self.vlan_id
         flow['match'] = match
 
-        if version == 0x01:
-            flow['actions'] = [{'action_type': 'output',
-                                'port': Port10.OFPP_CONTROLLER}]
-        elif version == 0x04:
+        if version == 0x04:
             flow['actions'] = [{'action_type': 'output',
                                 'port': Port13.OFPP_CONTROLLER}]
         else:

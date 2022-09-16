@@ -159,32 +159,20 @@ class TestMain(TestCase):
         self.assertTrue(mock_post.call_count, 3)
 
     @patch('napps.kytos.of_lldp.main.PO13')
-    @patch('napps.kytos.of_lldp.main.PO10')
     @patch('napps.kytos.of_lldp.main.AO13')
-    @patch('napps.kytos.of_lldp.main.AO10')
     def test_build_lldp_packet_out(self, *args):
         """Test _build_lldp_packet_out method."""
-        (mock_ao10, mock_ao13, mock_po10, mock_po13) = args
+        (mock_ao13, mock_po13) = args
 
-        ao10 = MagicMock()
         ao13 = MagicMock()
-        po10 = MagicMock()
-        po10.actions = []
         po13 = MagicMock()
         po13.actions = []
 
-        mock_ao10.return_value = ao10
         mock_ao13.return_value = ao13
-        mock_po10.return_value = po10
         mock_po13.return_value = po13
 
-        packet_out10 = self.napp._build_lldp_packet_out(0x01, 1, 'data1')
         packet_out13 = self.napp._build_lldp_packet_out(0x04, 2, 'data2')
         packet_out14 = self.napp._build_lldp_packet_out(0x05, 3, 'data3')
-
-        self.assertEqual(packet_out10.data, 'data1')
-        self.assertEqual(packet_out10.actions, [ao10])
-        self.assertEqual(packet_out10.actions[0].port, 1)
 
         self.assertEqual(packet_out13.data, 'data2')
         self.assertEqual(packet_out13.actions, [ao13])
@@ -195,13 +183,11 @@ class TestMain(TestCase):
     @patch('napps.kytos.of_lldp.main.settings')
     @patch('napps.kytos.of_lldp.main.EtherType')
     @patch('napps.kytos.of_lldp.main.Port13')
-    @patch('napps.kytos.of_lldp.main.Port10')
     def test_build_lldp_flow(self, *args):
         """Test _build_lldp_flow method."""
-        (mock_v0x01_port, mock_v0x04_port, mock_ethertype,
+        (mock_v0x04_port, mock_ethertype,
          mock_settings) = args
         self.napp.vlan_id = None
-        mock_v0x01_port.OFPP_CONTROLLER = 123
         mock_v0x04_port.OFPP_CONTROLLER = 1234
 
         mock_ethertype.LLDP = 10
@@ -217,15 +203,9 @@ class TestMain(TestCase):
         match['dl_type'] = 10
 
         flow['match'] = match
-        expected_flow_v0x01 = flow.copy()
         expected_flow_v0x04 = flow.copy()
-        expected_flow_v0x01['cookie'] = get_cookie(dpid)
-        expected_flow_v0x01['cookie_mask'] = 0xffffffffffffffff
         expected_flow_v0x04['cookie'] = get_cookie(dpid)
         expected_flow_v0x04['cookie_mask'] = 0xffffffffffffffff
-
-        expected_flow_v0x01['actions'] = [{'action_type': 'output',
-                                           'port': 123}]
 
         expected_flow_v0x04['actions'] = [{'action_type': 'output',
                                            'port': 1234}]
@@ -233,7 +213,7 @@ class TestMain(TestCase):
         flow_mod10 = self.napp._build_lldp_flow(0x01, get_cookie(dpid))
         flow_mod13 = self.napp._build_lldp_flow(0x04, get_cookie(dpid))
 
-        self.assertDictEqual(flow_mod10, expected_flow_v0x01)
+        self.assertIsNone(flow_mod10)
         self.assertDictEqual(flow_mod13, expected_flow_v0x04)
 
     def test_unpack_non_empty(self):
@@ -306,9 +286,7 @@ class TestMain(TestCase):
         expected_interfaces = ['00:00:00:00:00:00:00:01:1',
                                '00:00:00:00:00:00:00:01:2',
                                '00:00:00:00:00:00:00:02:1',
-                               '00:00:00:00:00:00:00:02:2',
-                               '00:00:00:00:00:00:00:03:1',
-                               '00:00:00:00:00:00:00:03:2']
+                               '00:00:00:00:00:00:00:02:2']
 
         self.assertEqual(lldp_interfaces, expected_interfaces)
 
@@ -321,9 +299,7 @@ class TestMain(TestCase):
         expected_data = {"interfaces": ['00:00:00:00:00:00:00:01:1',
                                         '00:00:00:00:00:00:00:01:2',
                                         '00:00:00:00:00:00:00:02:1',
-                                        '00:00:00:00:00:00:00:02:2',
-                                        '00:00:00:00:00:00:00:03:1',
-                                        '00:00:00:00:00:00:00:03:2']}
+                                        '00:00:00:00:00:00:00:02:2']}
         self.assertEqual(response.json, expected_data)
         self.assertEqual(response.status_code, 200)
 
@@ -332,9 +308,7 @@ class TestMain(TestCase):
         data = {"interfaces": ['00:00:00:00:00:00:00:01:1',
                                '00:00:00:00:00:00:00:01:2',
                                '00:00:00:00:00:00:00:02:1',
-                               '00:00:00:00:00:00:00:02:2',
-                               '00:00:00:00:00:00:00:03:1',
-                               '00:00:00:00:00:00:00:03:2']}
+                               '00:00:00:00:00:00:00:02:2']}
 
         api = get_test_client(self.napp.controller, self.napp)
         self.napp.publish_liveness_status = MagicMock()
