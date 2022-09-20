@@ -10,7 +10,6 @@ from napps.kytos.of_lldp.utils import get_cookie
 from tests.helpers import get_topology_mock
 
 
-@patch('kytos.core.buffers.KytosEventBuffer.aput')
 @patch('kytos.core.controller.Controller.get_switch_by_dpid')
 @patch('napps.kytos.of_lldp.main.Main._unpack_non_empty')
 @patch('napps.kytos.of_lldp.main.UBInt32')
@@ -20,13 +19,14 @@ from tests.helpers import get_topology_mock
 async def test_on_ofpt_packet_in(*args):
     """Test on_ofpt_packet_in."""
     (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
-     mock_unpack_non_empty, mock_get_switch_by_dpid, _) = args
+     mock_unpack_non_empty, mock_get_switch_by_dpid) = args
 
     # pylint: disable=bad-option-value, import-outside-toplevel
     from napps.kytos.of_lldp.main import Main
     Main.get_liveness_controller = MagicMock()
     topology = get_topology_mock()
     controller = get_controller_mock()
+    controller.buffers.app.aput = AsyncMock()
     controller.switches = topology.switches
     napp = Main(controller)
     napp.loop_manager.process_if_looped = AsyncMock()

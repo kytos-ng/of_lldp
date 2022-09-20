@@ -97,7 +97,7 @@ class Test(TestCommand):
 
     def run(self):
         """Run tests."""
-        cmd = 'python3 -m pytest tests/ %s' % self.get_args()
+        cmd = f'python3 -m pytest tests/ {self.get_args()}'
         try:
             check_call(cmd, shell=True)
         except CalledProcessError as exc:
@@ -113,7 +113,7 @@ class TestCoverage(Test):
 
     def run(self):
         """Run tests quietly and display coverage report."""
-        cmd = 'python3 -m pytest --cov=. tests/ %s' % self.get_args()
+        cmd = f'python3 -m pytest --cov=. tests/ {self.get_args()}'
         try:
             check_call(cmd, shell=True)
         except CalledProcessError as exc:
@@ -233,7 +233,7 @@ def symlink_if_different(path, target):
 def read_version_from_json():
     """Read the NApp version from NApp kytos.json file."""
     file = Path('kytos.json')
-    metadata = json.loads(file.read_text())
+    metadata = json.loads(file.read_text(encoding="utf8"))
     return metadata['version']
 
 
