@@ -95,7 +95,7 @@ Events
 Subscribed
 ----------
 
-- ``kytos/of_core.v0x0[14].messages.in.ofpt_packet_in``
+- ``kytos/of_core.v0x04.messages.in.ofpt_packet_in``
 - ``kytos/topology.switch.enabled``
 - ``kytos/topology.switch.disabled``
 - ``kytos/topology.topology_loaded``
