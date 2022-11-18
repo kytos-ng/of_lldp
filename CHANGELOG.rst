@@ -20,6 +20,7 @@ Removed
 
 Fixed
 =====
+- Added early return when trying to process a loop or consume liveness in case interfaces haven't been created yet.
 
 Security
 ========
