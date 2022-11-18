@@ -313,6 +313,8 @@ class Main(KytosNApp):
 
             interface_a = switch_a.get_interface_by_port_no(port_a.value)
             interface_b = switch_b.get_interface_by_port_no(port_b.value)
+            if not interface_a or not interface_b:
+                return
 
             await self.loop_manager.process_if_looped(interface_a, interface_b)
             await self.liveness_manager.consume_hello_if_enabled(interface_a,
