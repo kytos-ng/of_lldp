@@ -62,6 +62,61 @@ async def test_on_ofpt_packet_in(*args):
     assert controller.buffers.app.aput.call_count == 1
 
 
+@patch('kytos.core.controller.Controller.get_switch_by_dpid')
+@patch('napps.kytos.of_lldp.main.Main._unpack_non_empty')
+@patch('napps.kytos.of_lldp.main.UBInt32')
+@patch('napps.kytos.of_lldp.main.DPID')
+@patch('napps.kytos.of_lldp.main.LLDP')
+@patch('napps.kytos.of_lldp.main.Ethernet')
+async def test_on_ofpt_packet_in_early_intf(*args):
+    """Test on_ofpt_packet_in early intf return."""
+    (mock_ethernet, mock_lldp, mock_dpid, mock_ubint32,
+     mock_unpack_non_empty, mock_get_switch_by_dpid) = args
+
+    # pylint: disable=bad-option-value, import-outside-toplevel
+    from napps.kytos.of_lldp.main import Main
+    Main.get_liveness_controller = MagicMock()
+    topology = get_topology_mock()
+    controller = get_controller_mock()
+    controller.buffers.app.aput = AsyncMock()
+    controller.switches = topology.switches
+    napp = Main(controller)
+    napp.loop_manager.process_if_looped = AsyncMock()
+    napp.liveness_manager.consume_hello_if_enabled = AsyncMock()
+
+    switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+    message = MagicMock(in_port=1, data='data')
+    event = KytosEvent('ofpt_packet_in', content={'source': switch.connection,
+                       'message': message})
+
+    mocked, ethernet, lldp, dpid, port_b = [MagicMock() for _ in range(5)]
+    mocked.value = 1
+    mock_ubint32.return_value = mocked
+    ethernet.ether_type = 0x88CC
+    ethernet.data = 'eth_data'
+    lldp.chassis_id.sub_value = 'chassis_id'
+    lldp.port_id.sub_value = 'port_id'
+    dpid.value = "00:00:00:00:00:00:00:02"
+    port_b.value = 2
+
+    mock_unpack_non_empty.side_effect = [ethernet, lldp, dpid, port_b]
+    mock_get_switch_by_dpid.return_value = get_switch_mock(dpid.value,
+                                                           0x04)
+    switch.get_interface_by_port_no = MagicMock(return_value=None)
+    await napp.on_ofpt_packet_in(event)
+
+    calls = [call(mock_ethernet, message.data),
+             call(mock_lldp, ethernet.data),
+             call(mock_dpid, lldp.chassis_id.sub_value),
+             call(mock_ubint32, lldp.port_id.sub_value)]
+    mock_unpack_non_empty.assert_has_calls(calls)
+    switch.get_interface_by_port_no.assert_called()
+    # early return shouldn't allow these to get called
+    assert napp.loop_manager.process_if_looped.call_count == 0
+    assert napp.liveness_manager.consume_hello_if_enabled.call_count == 0
+    assert controller.buffers.app.aput.call_count == 0
+
+
 # pylint: disable=protected-access,too-many-public-methods
 class TestMain(TestCase):
     """Tests for the Main class."""
