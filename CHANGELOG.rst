@@ -5,14 +5,9 @@ All notable changes to the of_lldp NApp will be documented in this file.
 
 [UNRELEASED] - Under development
 ********************************
-Added
-=====
 
-Changed
-=======
-
-Deprecated
-==========
+[2022.3.0] - 2022-12-15
+***********************
 
 Removed
 =======
@@ -21,9 +16,6 @@ Removed
 Fixed
 =====
 - Added early return when trying to process a loop or consume liveness in case interfaces haven't been created yet.
-
-Security
-========
 
 [2022.2.0] - 2022-08-05
 ***********************
