@@ -1,5 +1,4 @@
 """Test Main methods."""
-from unittest import TestCase
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
@@ -117,24 +116,27 @@ async def test_on_ofpt_packet_in_early_intf(*args):
     assert controller.buffers.app.aput.call_count == 0
 
 
-# pylint: disable=protected-access,too-many-public-methods
-class TestMain(TestCase):
+# pylint: disable=protected-access,too-many-public-methods,
+# pylint: disable=attribute-defined-outside-init
+class TestMain:
     """Tests for the Main class."""
 
-    def setUp(self):
+    def setup_method(self):
         """Execute steps before each tests."""
-        self.server_name_url = 'http://127.0.0.1:8181/api/kytos/of_lldp'
-
-        patch('kytos.core.helpers.run_on_thread', lambda x: x).start()
+        # patch('kytos.core.helpers.run_on_thread', lambda x: x).start()
         # pylint: disable=bad-option-value, import-outside-toplevel
         from napps.kytos.of_lldp.main import Main
-        self.addCleanup(patch.stopall)
         Main.get_liveness_controller = MagicMock()
         self.topology = get_topology_mock()
         controller = get_controller_mock()
         controller.switches = self.topology.switches
-
+        self.base_endpoint = "kytos/of_lldp/v1"
         self.napp = Main(controller)
+        self.api_client = get_test_client(controller, self.napp)
+
+    def teardown_method(self) -> None:
+        """Teardown."""
+        patch.stopall()
 
     def get_topology_interfaces(self):
         """Return interfaces present in topology."""
@@ -144,7 +146,6 @@ class TestMain(TestCase):
         return interfaces
 
     @patch('napps.kytos.of_lldp.main.of_msg_prio')
-    @patch('kytos.core.buffers.KytosEventBuffer.put')
     @patch('napps.kytos.of_lldp.main.KytosEvent')
     @patch('napps.kytos.of_lldp.main.VLAN')
     @patch('napps.kytos.of_lldp.main.Ethernet')
@@ -152,8 +153,9 @@ class TestMain(TestCase):
     @patch('napps.kytos.of_lldp.main.LLDP')
     def test_execute(self, *args):
         """Test execute method."""
-        (_, _, mock_ethernet, _, mock_kytos_event,
-         mock_buffer_put, mock_of_msg_prio) = args
+        (_, _, mock_ethernet, _, mock_kytos_event, mock_of_msg_prio) = args
+        mock_buffer_put = MagicMock()
+        self.napp.controller.buffers.msg_out.put = mock_buffer_put
 
         ethernet = MagicMock()
         ethernet.pack.return_value = 'pack'
@@ -211,7 +213,7 @@ class TestMain(TestCase):
         mock.text = "some_err"
         mock_post.return_value = mock
         self.napp._handle_lldp_flows(event_post)
-        self.assertTrue(mock_post.call_count, 3)
+        assert mock_post.call_count == 3
 
     @patch('napps.kytos.of_lldp.main.PO13')
     @patch('napps.kytos.of_lldp.main.AO13')
@@ -229,11 +231,10 @@ class TestMain(TestCase):
         packet_out13 = self.napp._build_lldp_packet_out(0x04, 2, 'data2')
         packet_out14 = self.napp._build_lldp_packet_out(0x05, 3, 'data3')
 
-        self.assertEqual(packet_out13.data, 'data2')
-        self.assertEqual(packet_out13.actions, [ao13])
-        self.assertEqual(packet_out13.actions[0].port, 2)
-
-        self.assertIsNone(packet_out14)
+        assert packet_out13.data == 'data2'
+        assert packet_out13.actions == [ao13]
+        assert packet_out13.actions[0].port == 2
+        assert packet_out14 is None
 
     @patch('napps.kytos.of_lldp.main.settings')
     @patch('napps.kytos.of_lldp.main.EtherType')
@@ -268,8 +269,8 @@ class TestMain(TestCase):
         flow_mod10 = self.napp._build_lldp_flow(0x01, get_cookie(dpid))
         flow_mod13 = self.napp._build_lldp_flow(0x04, get_cookie(dpid))
 
-        self.assertIsNone(flow_mod10)
-        self.assertDictEqual(flow_mod13, expected_flow_v0x04)
+        assert flow_mod10 is None
+        assert flow_mod13 == expected_flow_v0x04
 
     def test_unpack_non_empty(self):
         """Test _unpack_non_empty method."""
@@ -281,15 +282,13 @@ class TestMain(TestCase):
 
         obj.unpack.assert_called_with('data')
 
-    def test_get_data(self):
+    def test_get_data(self, monkeypatch):
         """Test _get_data method."""
-        req = MagicMock()
         interfaces = ['00:00:00:00:00:00:00:01:1', '00:00:00:00:00:00:00:01:2']
-        req.get_json.return_value = {'interfaces': interfaces}
-
-        data = self.napp._get_data(req)
-
-        self.assertEqual(data, interfaces)
+        monkeypatch.setattr("napps.kytos.of_lldp.main.get_json_or_400",
+                            lambda req: {"interfaces": interfaces})
+        data = self.napp._get_data(MagicMock())
+        assert data == interfaces
 
     def test_load_liveness(self) -> None:
         """Test load_liveness."""
@@ -320,82 +319,64 @@ class TestMain(TestCase):
     def test_get_interfaces(self):
         """Test _get_interfaces method."""
         expected_interfaces = self.get_topology_interfaces()
-
         interfaces = self.napp._get_interfaces()
-
-        self.assertEqual(interfaces, expected_interfaces)
+        assert interfaces == expected_interfaces
 
     def test_get_interfaces_dict(self):
         """Test _get_interfaces_dict method."""
         interfaces = self.napp._get_interfaces()
         expected_interfaces = {inter.id: inter for inter in interfaces}
-
         interfaces_dict = self.napp._get_interfaces_dict(interfaces)
-
-        self.assertEqual(interfaces_dict, expected_interfaces)
+        assert interfaces_dict == expected_interfaces
 
     def test_get_lldp_interfaces(self):
         """Test _get_lldp_interfaces method."""
         lldp_interfaces = self.napp._get_lldp_interfaces()
-
         expected_interfaces = ['00:00:00:00:00:00:00:01:1',
                                '00:00:00:00:00:00:00:01:2',
                                '00:00:00:00:00:00:00:02:1',
                                '00:00:00:00:00:00:00:02:2']
+        assert lldp_interfaces == expected_interfaces
 
-        self.assertEqual(lldp_interfaces, expected_interfaces)
-
-    def test_rest_get_lldp_interfaces(self):
+    async def test_rest_get_lldp_interfaces(self):
         """Test get_lldp_interfaces method."""
-        api = get_test_client(self.napp.controller, self.napp)
-        url = f'{self.server_name_url}/v1/interfaces'
-        response = api.open(url, method='GET')
-
+        endpoint = f"{self.base_endpoint}/interfaces"
+        response = await self.api_client.get(endpoint)
         expected_data = {"interfaces": ['00:00:00:00:00:00:00:01:1',
                                         '00:00:00:00:00:00:00:01:2',
                                         '00:00:00:00:00:00:00:02:1',
                                         '00:00:00:00:00:00:00:02:2']}
-        self.assertEqual(response.json, expected_data)
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
+        assert response.json() == expected_data
 
-    def test_enable_disable_lldp_200(self):
+    async def test_enable_disable_lldp_200(self):
         """Test 200 response for enable_lldp and disable_lldp methods."""
         data = {"interfaces": ['00:00:00:00:00:00:00:01:1',
                                '00:00:00:00:00:00:00:01:2',
                                '00:00:00:00:00:00:00:02:1',
                                '00:00:00:00:00:00:00:02:2']}
-
-        api = get_test_client(self.napp.controller, self.napp)
         self.napp.publish_liveness_status = MagicMock()
-
-        url = f'{self.server_name_url}/v1/interfaces/disable'
-        disable_response = api.open(url, method='POST', json=data)
+        endpoint = f"{self.base_endpoint}/interfaces/disable"
+        response = await self.api_client.post(endpoint, json=data)
+        assert response.status_code == 200
         assert self.napp.liveness_controller.disable_interfaces.call_count == 1
         assert self.napp.publish_liveness_status.call_count == 1
+        endpoint = f"{self.base_endpoint}/interfaces/enable"
+        response = await self.api_client.post(endpoint, json=data)
+        assert response.status_code == 200
 
-        url = f'{self.server_name_url}/v1/interfaces/enable'
-        enable_response = api.open(url, method='POST', json=data)
-
-        self.assertEqual(disable_response.status_code, 200)
-        self.assertEqual(enable_response.status_code, 200)
-
-    def test_enable_disable_lldp_404(self):
+    async def test_enable_disable_lldp_404(self):
         """Test 404 response for enable_lldp and disable_lldp methods."""
         data = {"interfaces": []}
-
         self.napp.controller.switches = {}
-        api = get_test_client(self.napp.controller, self.napp)
+        endpoint = f"{self.base_endpoint}/disable"
+        response = await self.api_client.post(endpoint, json=data)
+        assert response.status_code == 404
+        endpoint = f"{self.base_endpoint}/enable"
+        response = await self.api_client.post(endpoint, json=data)
+        assert response.status_code == 404
 
-        url = f'{self.server_name_url}/v1/interfaces/disable'
-        disable_response = api.open(url, method='POST', json=data)
-
-        url = f'{self.server_name_url}/v1/interfaces/enable'
-        enable_response = api.open(url, method='POST', json=data)
-
-        self.assertEqual(disable_response.status_code, 404)
-        self.assertEqual(enable_response.status_code, 404)
-
-    def test_enable_disable_lldp_400(self):
+    async def test_enable_disable_lldp_400(self):
         """Test 400 response for enable_lldp and disable_lldp methods."""
         data = {"interfaces": ['00:00:00:00:00:00:00:01:1',
                                '00:00:00:00:00:00:00:01:2',
@@ -404,95 +385,76 @@ class TestMain(TestCase):
                                '00:00:00:00:00:00:00:03:1',
                                '00:00:00:00:00:00:00:03:2',
                                '00:00:00:00:00:00:00:04:1']}
-
-        api = get_test_client(self.napp.controller, self.napp)
         self.napp.publish_liveness_status = MagicMock()
-
-        url = f'{self.server_name_url}/v1/interfaces/disable'
-        disable_response = api.open(url, method='POST', json=data)
+        url = f'{self.base_endpoint}/interfaces/disable'
+        response = await self.api_client.post(url, json=data)
+        assert response.status_code == 400
         assert self.napp.publish_liveness_status.call_count == 1
 
-        url = f'{self.server_name_url}/v1/interfaces/enable'
-        enable_response = api.open(url, method='POST', json=data)
+        url = f'{self.base_endpoint}/interfaces/enable'
+        response = await self.api_client.post(url, json=data)
+        assert response.status_code == 400
 
-        self.assertEqual(disable_response.status_code, 400)
-        self.assertEqual(enable_response.status_code, 400)
-
-    def test_get_time(self):
+    async def test_get_time(self):
         """Test get polling time."""
-        api = get_test_client(self.napp.controller, self.napp)
+        url = f"{self.base_endpoint}/polling_time"
+        response = await self.api_client.get(url)
+        assert response.status_code == 200
 
-        url = f'{self.server_name_url}/v1/polling_time'
-        response = api.open(url, method='GET')
-
-        self.assertEqual(response.status_code, 200)
-
-    def test_set_time(self):
+    async def test_set_polling_time(self):
         """Test update polling time."""
-        data = {"polling_time": 5}
+        url = f"{self.base_endpoint}/polling_time"
+        data = {'polling_time': 5}
+        response = await self.api_client.post(url, json=data)
+        assert response.status_code == 200
 
-        api = get_test_client(self.napp.controller, self.napp)
-
-        url = f'{self.server_name_url}/v1/polling_time'
-        response = api.open(url, method='POST', json=data)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.napp.polling_time, data['polling_time'])
-
-    def test_set_time_400(self):
+    async def test_set_time_400(self):
         """Test fail case the update polling time."""
-        api = get_test_client(self.napp.controller, self.napp)
-
-        url = f'{self.server_name_url}/v1/polling_time'
-
+        url = f"{self.base_endpoint}/polling_time"
         data = {'polling_time': 'A'}
-        response = api.open(url, method='POST', json=data)
-        self.assertEqual(response.status_code, 400)
+        response = await self.api_client.post(url, json=data)
+        assert response.status_code == 400
 
-    def test_endpoint_enable_liveness(self):
+    async def test_endpoint_enable_liveness(self):
         """Test POST v1/liveness/enable."""
         self.napp.liveness_manager.enable = MagicMock()
         self.napp.publish_liveness_status = MagicMock()
-        api = get_test_client(self.napp.controller, self.napp)
-        url = f"{self.server_name_url}/v1/liveness/enable"
+        url = f"{self.base_endpoint}/liveness/enable"
         data = {"interfaces": ["00:00:00:00:00:00:00:01:1"]}
-        response = api.open(url, method="POST", json=data)
+        response = await self.api_client.post(url, json=data)
+        assert response.status_code == 200
+        assert response.json() == {}
         assert self.napp.liveness_controller.enable_interfaces.call_count == 1
         assert self.napp.liveness_manager.enable.call_count == 1
         assert self.napp.publish_liveness_status.call_count == 1
-        assert response.json == {}
-        assert response.status_code == 200
 
-    def test_endpoint_disable_liveness(self):
+    async def test_endpoint_disable_liveness(self):
         """Test POST v1/liveness/disable."""
         self.napp.liveness_manager.disable = MagicMock()
         self.napp.publish_liveness_status = MagicMock()
-        api = get_test_client(self.napp.controller, self.napp)
-        url = f"{self.server_name_url}/v1/liveness/disable"
+        url = f"{self.base_endpoint}/liveness/disable"
         data = {"interfaces": ["00:00:00:00:00:00:00:01:1"]}
-        response = api.open(url, method='POST', json=data)
+        response = await self.api_client.post(url, json=data)
+        assert response.status_code == 200
+        assert response.json() == {}
         assert self.napp.liveness_controller.disable_interfaces.call_count == 1
         assert self.napp.liveness_manager.disable.call_count == 1
         assert self.napp.publish_liveness_status.call_count == 1
-        assert response.json == {}
-        assert response.status_code == 200
 
-    def test_endpoint_get_liveness(self):
+    async def test_endpoint_get_liveness(self):
         """Test GET v1/liveness/."""
         self.napp.liveness_manager.enable = MagicMock()
         self.napp.publish_liveness_status = MagicMock()
-        api = get_test_client(self.napp.controller, self.napp)
-        url = f"{self.server_name_url}/v1/liveness/"
-        response = api.open(url, method="GET")
-        assert response.json == {"interfaces": []}
+        url = f"{self.base_endpoint}/liveness/"
+        response = await self.api_client.get(url)
         assert response.status_code == 200
+        assert response.json() == {"interfaces": []}
 
-    def test_endpoint_get_pair_liveness(self):
+    async def test_endpoint_get_pair_liveness(self):
         """Test GET v1/liveness//pair."""
         self.napp.liveness_manager.enable = MagicMock()
         self.napp.publish_liveness_status = MagicMock()
-        api = get_test_client(self.napp.controller, self.napp)
-        url = f"{self.server_name_url}/v1/liveness/pair"
-        response = api.open(url, method="GET")
-        assert response.json == {"pairs": []}
+        url = f"{self.base_endpoint}/liveness/pair"
+        response = await self.api_client.get(url)
         assert response.status_code == 200
+        assert response.json() == {"pairs": []}
