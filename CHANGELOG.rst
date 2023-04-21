@@ -17,6 +17,10 @@ Fixed
 =====
 - Added early return when trying to process a loop or consume liveness in case interfaces haven't been created yet.
 
+General Information
+===================
+- ``@rest`` endpoints are now run by ``starlette/uvicorn`` instead of ``flask/werkzeug``.
+
 [2022.2.0] - 2022-08-05
 ***********************
 
