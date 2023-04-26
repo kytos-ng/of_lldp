@@ -117,6 +117,30 @@ async def test_on_ofpt_packet_in_early_intf(*args):
     assert controller.buffers.app.aput.call_count == 0
 
 
+async def test_on_table_enabled():
+    """Test on_table_enabled"""
+    # pylint: disable=bad-option-value, import-outside-toplevel
+    from napps.kytos.of_lldp.main import Main
+    controller = get_controller_mock()
+    controller.buffers.app.aput = AsyncMock()
+    napp = Main(controller)
+
+    # Succesfully setting table groups
+    content = {"of_lldp": {"base": 123}}
+    event = KytosEvent(name="kytos/of_multi_table.enable_table",
+                       content=content)
+    await napp.on_table_enabled(event)
+    assert napp.table_group == content["of_lldp"]
+    assert controller.buffers.app.aput.call_count == 1
+
+    # Failure at setting table groups
+    content = {"of_lldp": {"unknown": 123}}
+    event = KytosEvent(name="kytos/of_multi_table.enable_table",
+                       content=content)
+    await napp.on_table_enabled(event)
+    assert controller.buffers.app.aput.call_count == 1
+
+
 # pylint: disable=protected-access,too-many-public-methods
 class TestMain(TestCase):
     """Tests for the Main class."""
@@ -264,6 +288,8 @@ class TestMain(TestCase):
 
         expected_flow_v0x04['actions'] = [{'action_type': 'output',
                                            'port': 1234}]
+        expected_flow_v0x04['table_group'] = 'base'
+        expected_flow_v0x04['owner'] = 'of_lldp'
 
         flow_mod10 = self.napp._build_lldp_flow(0x01, get_cookie(dpid))
         flow_mod13 = self.napp._build_lldp_flow(0x04, get_cookie(dpid))
@@ -496,3 +522,12 @@ class TestMain(TestCase):
         response = api.open(url, method="GET")
         assert response.json == {"pairs": []}
         assert response.status_code == 200
+
+    def test_set_flow_table_group_owner(self):
+        """Test set_flow_table_group_owner"""
+        self.napp.table_group = {"base": 2}
+        flow = {}
+        self.napp.set_flow_table_group_owner(flow, "base")
+        assert "table_group" in flow
+        assert "owner" in flow
+        assert flow["table_id"] == 2

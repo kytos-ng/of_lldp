@@ -40,6 +40,7 @@ class Main(KytosNApp):
         self.liveness_manager = LivenessManager(self.controller)
         Link.register_status_func(f"{self.napp_id}_liveness",
                                   LivenessManager.link_status_hook_liveness)
+        self.table_group = {"base": 0}
 
     @staticmethod
     def get_liveness_controller() -> LivenessController:
@@ -390,7 +391,14 @@ class Main(KytosNApp):
 
         """
         flow = {}
+        if version == 0x04:
+            flow['actions'] = [{'action_type': 'output',
+                                'port': Port13.OFPP_CONTROLLER}]
+        else:
+            return None
+
         match = {}
+        self.set_flow_table_group_owner(flow)
         flow['priority'] = settings.FLOW_PRIORITY
         flow['table_id'] = settings.TABLE_ID
         flow['cookie'] = cookie
@@ -399,12 +407,6 @@ class Main(KytosNApp):
         if self.vlan_id:
             match['dl_vlan'] = self.vlan_id
         flow['match'] = match
-
-        if version == 0x04:
-            flow['actions'] = [{'action_type': 'output',
-                                'port': Port13.OFPP_CONTROLLER}]
-        else:
-            flow = None
 
         return flow
 
@@ -638,3 +640,33 @@ class Main(KytosNApp):
         except (ValueError, KeyError) as error:
             msg = f"This operation is not completed: {error}"
             return jsonify(msg), 400
+
+    def set_flow_table_group_owner(self,
+                                   flow: dict,
+                                   group: str = "base") -> dict:
+        """Set owner, table_group and table_id"""
+        flow["table_id"] = self.table_group[group]
+        flow["owner"] = "of_lldp"
+        flow["table_group"] = group
+        return flow
+
+    # pylint: disable=attribute-defined-outside-init
+    @alisten_to("kytos/of_multi_table.enable_table")
+    async def on_table_enabled(self, event):
+        """Handle a recently table enabled.
+        of_lldp only allows "base" as flow group
+        """
+        table_group = event.content.get("of_lldp", None)
+        if not table_group:
+            return
+        for group in table_group:
+            if group not in settings.TABLE_GROUP_ALLOWED:
+                log.error(f'The table group "{group}" is not allowed for '
+                          f'of_lldp. Allowed table groups are '
+                          f'{settings.TABLE_GROUP_ALLOWED}')
+                return
+        self.table_group = table_group
+        content = {"group_table": self.table_group}
+        event_out = KytosEvent(name="kytos/of_lldp.enable_table",
+                               content=content)
+        await self.controller.buffers.app.aput(event_out)
