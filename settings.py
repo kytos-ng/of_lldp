@@ -21,3 +21,5 @@ LOOP_LOG_EVERY = int(max(900 / max(POLLING_TIME, 1), 1))  # 5 mins by default
 
 # Prefix this NApp has when using cookies
 COOKIE_PREFIX = 0xab
+
+TABLE_GROUP_ALLOWED = {"base"}

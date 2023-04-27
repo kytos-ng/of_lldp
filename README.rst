@@ -100,6 +100,7 @@ Subscribed
 - ``kytos/topology.switch.disabled``
 - ``kytos/topology.topology_loaded``
 - ``kytos/topology.switches.metadata.(added|removed)``
+- ``kytos/of_multi_table.enable_table``
 
 Published
 ---------
@@ -242,6 +243,16 @@ Content:
      "interfaces": [<Interface obj>]
    }
 
+kytos/of_lldp.enable_table
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A response from the ``kytos/of_multi_table.enable_table`` event to confirm table settings.
+
+.. code-block:: python3
+
+  {
+    'table_group': <object>
+  }
 
 .. |License| image:: https://img.shields.io/github/license/kytos-ng/kytos.svg
    :target: https://github.com/kytos-ng/of_lldp/blob/master/LICENSE
