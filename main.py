@@ -433,10 +433,9 @@ class Main(KytosNApp):
 
         return obj
 
-    @staticmethod
-    def _get_data(request: Request) -> list:
+    def _get_data(self, request: Request) -> list:
         """Get request data."""
-        data = get_json_or_400(request)  # Valid format { "interfaces": [...] }
+        data = get_json_or_400(request, self.controller.loop)
         return data.get('interfaces', [])
 
     def _get_interfaces(self):
