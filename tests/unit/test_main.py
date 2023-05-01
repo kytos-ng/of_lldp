@@ -286,7 +286,7 @@ class TestMain:
         """Test _get_data method."""
         interfaces = ['00:00:00:00:00:00:00:01:1', '00:00:00:00:00:00:00:01:2']
         monkeypatch.setattr("napps.kytos.of_lldp.main.get_json_or_400",
-                            lambda req: {"interfaces": interfaces})
+                            lambda req, loop: {"interfaces": interfaces})
         data = self.napp._get_data(MagicMock())
         assert data == interfaces
 
@@ -349,12 +349,13 @@ class TestMain:
         assert response.status_code == 200
         assert response.json() == expected_data
 
-    async def test_enable_disable_lldp_200(self):
+    async def test_enable_disable_lldp_200(self, event_loop):
         """Test 200 response for enable_lldp and disable_lldp methods."""
         data = {"interfaces": ['00:00:00:00:00:00:00:01:1',
                                '00:00:00:00:00:00:00:01:2',
                                '00:00:00:00:00:00:00:02:1',
                                '00:00:00:00:00:00:00:02:2']}
+        self.napp.controller.loop = event_loop
         self.napp.publish_liveness_status = MagicMock()
         endpoint = f"{self.base_endpoint}/interfaces/disable"
         response = await self.api_client.post(endpoint, json=data)
@@ -376,7 +377,7 @@ class TestMain:
         response = await self.api_client.post(endpoint, json=data)
         assert response.status_code == 404
 
-    async def test_enable_disable_lldp_400(self):
+    async def test_enable_disable_lldp_400(self, event_loop):
         """Test 400 response for enable_lldp and disable_lldp methods."""
         data = {"interfaces": ['00:00:00:00:00:00:00:01:1',
                                '00:00:00:00:00:00:00:01:2',
@@ -385,6 +386,7 @@ class TestMain:
                                '00:00:00:00:00:00:00:03:1',
                                '00:00:00:00:00:00:00:03:2',
                                '00:00:00:00:00:00:00:04:1']}
+        self.napp.controller.loop = event_loop
         self.napp.publish_liveness_status = MagicMock()
         url = f'{self.base_endpoint}/interfaces/disable'
         response = await self.api_client.post(url, json=data)
@@ -415,8 +417,9 @@ class TestMain:
         response = await self.api_client.post(url, json=data)
         assert response.status_code == 400
 
-    async def test_endpoint_enable_liveness(self):
+    async def test_endpoint_enable_liveness(self, event_loop):
         """Test POST v1/liveness/enable."""
+        self.napp.controller.loop = event_loop
         self.napp.liveness_manager.enable = MagicMock()
         self.napp.publish_liveness_status = MagicMock()
         url = f"{self.base_endpoint}/liveness/enable"
@@ -428,8 +431,9 @@ class TestMain:
         assert self.napp.liveness_manager.enable.call_count == 1
         assert self.napp.publish_liveness_status.call_count == 1
 
-    async def test_endpoint_disable_liveness(self):
+    async def test_endpoint_disable_liveness(self, event_loop):
         """Test POST v1/liveness/disable."""
+        self.napp.controller.loop = event_loop
         self.napp.liveness_manager.disable = MagicMock()
         self.napp.publish_liveness_status = MagicMock()
         url = f"{self.base_endpoint}/liveness/disable"
