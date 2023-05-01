@@ -6,6 +6,19 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+Changed
+=======
+- ``of_lldp`` now supports table group settings from ``of_multi_table``
+
+Added
+=====
+- Subscribed to new event ``kytos/of_multi_table.enable_table`` as well as publishing ``kytos/of_lldp.enable_table`` required to set a different ``table_id`` to flows.
+- Added ``settings.TABLE_GROUP_ALLOWED`` set containning the allowed table groups, for now there is only ``'base'``.
+
+General Information
+===================
+- ``@rest`` endpoints are now run by ``starlette/uvicorn`` instead of ``flask/werkzeug``.
+
 [2022.3.0] - 2022-12-15
 ***********************
 
@@ -16,10 +29,6 @@ Removed
 Fixed
 =====
 - Added early return when trying to process a loop or consume liveness in case interfaces haven't been created yet.
-
-General Information
-===================
-- ``@rest`` endpoints are now run by ``starlette/uvicorn`` instead of ``flask/werkzeug``.
 
 [2022.2.0] - 2022-08-05
 ***********************
