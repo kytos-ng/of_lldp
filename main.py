@@ -3,7 +3,11 @@ import struct
 import time
 
 import requests
-from flask import jsonify, request
+from napps.kytos.of_core.msg_prios import of_msg_prio
+from napps.kytos.of_lldp import constants, settings
+from napps.kytos.of_lldp.managers import LivenessManager, LoopManager
+from napps.kytos.of_lldp.managers.loop_manager import LoopState
+from napps.kytos.of_lldp.utils import get_cookie
 from pyof.foundation.basic_types import DPID, UBInt32
 from pyof.foundation.network_types import LLDP, VLAN, Ethernet, EtherType
 from pyof.v0x04.common.action import ActionOutput as AO13
@@ -13,11 +17,8 @@ from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import alisten_to, listen_to
 from kytos.core.link import Link
-from napps.kytos.of_core.msg_prios import of_msg_prio
-from napps.kytos.of_lldp import constants, settings
-from napps.kytos.of_lldp.managers import LivenessManager, LoopManager
-from napps.kytos.of_lldp.managers.loop_manager import LoopState
-from napps.kytos.of_lldp.utils import get_cookie
+from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
+                                 aget_json_or_400, get_json_or_400)
 
 from .controllers import LivenessController
 
@@ -70,7 +71,7 @@ class Main(KytosNApp):
             for interface in interfaces:
                 # Interface marked to receive lldp packet
                 # Only send LLDP packet to active interface
-                if(not interface.lldp or not interface.is_active()
+                if (not interface.lldp or not interface.is_active()
                    or not interface.is_enabled()):
                     continue
                 # Avoid the interface that connects to the controller.
@@ -434,10 +435,9 @@ class Main(KytosNApp):
 
         return obj
 
-    @staticmethod
-    def _get_data(req):
+    def _get_data(self, request: Request) -> list:
         """Get request data."""
-        data = req.get_json()  # Valid format { "interfaces": [...] }
+        data = get_json_or_400(request, self.controller.loop)
         return data.get('interfaces', [])
 
     def _get_interfaces(self):
@@ -457,12 +457,12 @@ class Main(KytosNApp):
         return [inter.id for inter in self._get_interfaces() if inter.lldp]
 
     @rest('v1/interfaces', methods=['GET'])
-    def get_lldp_interfaces(self):
+    async def get_lldp_interfaces(self, _request: Request) -> JSONResponse:
         """Return all the interfaces that have LLDP traffic enabled."""
-        return jsonify({"interfaces": self._get_lldp_interfaces()}), 200
+        return JSONResponse({"interfaces": self._get_lldp_interfaces()})
 
     @rest('v1/interfaces/disable', methods=['POST'])
-    def disable_lldp(self):
+    def disable_lldp(self, request: Request) -> JSONResponse:
         """Disables an interface to receive LLDP packets."""
         interface_ids = self._get_data(request)
         error_list = []  # List of interfaces that were not activated.
@@ -471,7 +471,7 @@ class Main(KytosNApp):
         interfaces = self._get_interfaces()
         intfs = []
         if not interfaces:
-            return jsonify("No interfaces were found."), 404
+            raise HTTPException(404, detail="No interfaces were found.")
         interfaces = self._get_interfaces_dict(interfaces)
         for id_ in interface_ids:
             interface = interfaces.get(id_)
@@ -488,16 +488,15 @@ class Main(KytosNApp):
             self.liveness_manager.disable(*intfs)
             self.publish_liveness_status("disabled", intfs)
         if not error_list:
-            return jsonify(
-                "All the requested interfaces have been disabled."), 200
+            return JSONResponse(
+                "All the requested interfaces have been disabled.")
 
         # Return a list of interfaces that couldn't be disabled
         msg_error = "Some interfaces couldn't be found and deactivated: "
-        return jsonify({msg_error:
-                        error_list}), 400
+        return JSONResponse({msg_error: error_list}, status_code=400)
 
     @rest('v1/interfaces/enable', methods=['POST'])
-    def enable_lldp(self):
+    def enable_lldp(self, request: Request) -> JSONResponse:
         """Enable an interface to receive LLDP packets."""
         interface_ids = self._get_data(request)
         error_list = []  # List of interfaces that were not activated.
@@ -505,7 +504,7 @@ class Main(KytosNApp):
         interface_ids = filter(None, interface_ids)
         interfaces = self._get_interfaces()
         if not interfaces:
-            return jsonify("No interfaces were found."), 404
+            raise HTTPException(404, detail="No interfaces were found.")
         interfaces = self._get_interfaces_dict(interfaces)
         for id_ in interface_ids:
             interface = interfaces.get(id_)
@@ -517,57 +516,56 @@ class Main(KytosNApp):
         if changed_interfaces:
             self.notify_lldp_change('enabled', changed_interfaces)
         if not error_list:
-            return jsonify(
-                "All the requested interfaces have been enabled."), 200
+            return JSONResponse(
+                "All the requested interfaces have been enabled.")
 
         # Return a list of interfaces that couldn't be enabled
         msg_error = "Some interfaces couldn't be found and activated: "
-        return jsonify({msg_error:
-                        error_list}), 400
+        return JSONResponse({msg_error: error_list}, status_code=400)
 
     @rest("v1/liveness/enable", methods=["POST"])
-    def enable_liveness(self):
+    def enable_liveness(self, request: Request) -> JSONResponse:
         """Enable liveness link detection on interfaces."""
         intf_ids = self._get_data(request)
         if not intf_ids:
-            return jsonify("Interfaces payload is empty"), 400
+            raise HTTPException(400, "Interfaces payload is empty")
         interfaces = {intf.id: intf for intf in self._get_interfaces()}
         diff = set(intf_ids) - set(interfaces.keys())
         if diff:
-            return jsonify(f"Interface IDs {diff} not found"), 404
+            raise HTTPException(404, f"Interface IDs {diff} not found")
 
         intfs = [interfaces[_id] for _id in intf_ids]
         non_lldp = [intf.id for intf in intfs if not intf.lldp]
         if non_lldp:
             msg = f"Interface IDs {non_lldp} don't have LLDP enabled"
-            return jsonify(msg), 400
+            raise HTTPException(400, msg)
         self.liveness_controller.enable_interfaces(intf_ids)
         self.liveness_manager.enable(*intfs)
         self.publish_liveness_status("enabled", intfs)
-        return jsonify(), 200
+        return JSONResponse({})
 
     @rest("v1/liveness/disable", methods=["POST"])
-    def disable_liveness(self):
+    def disable_liveness(self, request: Request) -> JSONResponse:
         """Disable liveness link detection on interfaces."""
         intf_ids = self._get_data(request)
         if not intf_ids:
-            return jsonify("Interfaces payload is empty"), 400
+            raise HTTPException(400, "Interfaces payload is empty")
 
         interfaces = {intf.id: intf for intf in self._get_interfaces()}
         diff = set(intf_ids) - set(interfaces.keys())
         if diff:
-            return jsonify(f"Interface IDs {diff} not found"), 404
+            raise HTTPException(404, f"Interface IDs {diff} not found")
 
         intfs = [interfaces[_id] for _id in intf_ids if _id in interfaces]
         self.liveness_controller.disable_interfaces(intf_ids)
         self.liveness_manager.disable(*intfs)
         self.publish_liveness_status("disabled", intfs)
-        return jsonify(), 200
+        return JSONResponse({})
 
     @rest("v1/liveness/", methods=["GET"])
-    def get_liveness_interfaces(self):
+    async def get_liveness_interfaces(self, request: Request) -> JSONResponse:
         """Get liveness interfaces."""
-        args = request.args
+        args = request.query_params
         interface_id = args.get("interface_id")
         if interface_id:
             status, last_hello_at = self.liveness_manager.get_interface_status(
@@ -584,7 +582,7 @@ class Main(KytosNApp):
                     }
                 ]
             }
-            return jsonify(body), 200
+            return JSONResponse(body)
         interfaces = []
         for interface_id in list(self.liveness_manager.interfaces.keys()):
             status, last_hello_at = self.liveness_manager.get_interface_status(
@@ -592,10 +590,11 @@ class Main(KytosNApp):
             )
             interfaces.append({"id": interface_id, "status": status,
                               "last_hello_at": last_hello_at})
-        return jsonify({"interfaces": interfaces}), 200
+        return JSONResponse({"interfaces": interfaces})
 
     @rest("v1/liveness/pair", methods=["GET"])
-    def get_liveness_interface_pairs(self):
+    async def get_liveness_interface_pairs(self,
+                                           _request: Request) -> JSONResponse:
         """Get liveness interface pairs."""
         pairs = []
         for entry in list(self.liveness_manager.liveness.values()):
@@ -614,32 +613,33 @@ class Main(KytosNApp):
                 "status": lsm.state
             }
             pairs.append(pair)
-        return jsonify({"pairs": pairs})
+        return JSONResponse({"pairs": pairs})
 
     @rest('v1/polling_time', methods=['GET'])
-    def get_time(self):
+    async def get_time(self, _request: Request) -> JSONResponse:
         """Get LLDP polling time in seconds."""
-        return jsonify({"polling_time": self.polling_time}), 200
+        return JSONResponse({"polling_time": self.polling_time})
 
     @rest('v1/polling_time', methods=['POST'])
-    def set_time(self):
+    async def set_time(self, request: Request) -> JSONResponse:
         """Set LLDP polling time."""
         # pylint: disable=attribute-defined-outside-init
         try:
-            payload = request.get_json()
+            payload = await aget_json_or_400(request)
             polling_time = int(payload['polling_time'])
             if polling_time <= 0:
-                raise ValueError(f"invalid polling_time {polling_time}, "
-                                 "must be greater than zero")
+                msg = f"invalid polling_time {polling_time}, " \
+                        "must be greater than zero"
+                raise HTTPException(400, detail=msg)
             self.polling_time = polling_time
             self.execute_as_loop(self.polling_time)
             log.info("Polling time has been updated to %s"
                      " second(s), but this change will not be saved"
                      " permanently.", self.polling_time)
-            return jsonify("Polling time has been updated."), 200
+            return JSONResponse("Polling time has been updated.")
         except (ValueError, KeyError) as error:
             msg = f"This operation is not completed: {error}"
-            return jsonify(msg), 400
+            raise HTTPException(400, detail=msg) from error
 
     def set_flow_table_group_owner(self,
                                    flow: dict,
