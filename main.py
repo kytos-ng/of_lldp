@@ -401,7 +401,6 @@ class Main(KytosNApp):
         match = {}
         self.set_flow_table_group_owner(flow)
         flow['priority'] = settings.FLOW_PRIORITY
-        flow['table_id'] = settings.TABLE_ID
         flow['cookie'] = cookie
         flow['cookie_mask'] = cookie_mask
         match['dl_type'] = EtherType.LLDP
