@@ -664,7 +664,7 @@ class Main(KytosNApp):
                           f'of_lldp. Allowed table groups are '
                           f'{settings.TABLE_GROUP_ALLOWED}')
                 return
-        self.table_group = table_group
+        self.table_group.update(table_group)
         content = {"group_table": self.table_group}
         event_out = KytosEvent(name="kytos/of_lldp.enable_table",
                                content=content)
