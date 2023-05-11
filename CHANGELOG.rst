@@ -9,6 +9,7 @@ All notable changes to the of_lldp NApp will be documented in this file.
 Changed
 =======
 - ``of_lldp`` now supports table group settings from ``of_multi_table``
+- ``settings.TABLE_ID`` is no longer supported, ``table_id`` is managed by ``of_multi_table``
 
 Added
 =====
