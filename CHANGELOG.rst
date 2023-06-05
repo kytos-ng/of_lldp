@@ -6,6 +6,9 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+[2023.1.0] - 2023-06-05
+***********************
+
 Changed
 =======
 - ``of_lldp`` now supports table group settings from ``of_multi_table``
@@ -14,7 +17,7 @@ Changed
 Added
 =====
 - Subscribed to new event ``kytos/of_multi_table.enable_table`` as well as publishing ``kytos/of_lldp.enable_table`` required to set a different ``table_id`` to flows.
-- Added ``settings.TABLE_GROUP_ALLOWED`` set containning the allowed table groups, for now there is only ``'base'``.
+- Added ``settings.TABLE_GROUP_ALLOWED`` set containing the allowed table groups, for now there is only ``'base'``.
 
 General Information
 ===================
