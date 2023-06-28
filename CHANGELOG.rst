@@ -11,7 +11,7 @@ All notable changes to the of_lldp NApp will be documented in this file.
 
 Changed
 =======
-- When sending a PacketOut, if a interface's MAC address is invalid (all zeros or isn't an unicast address) it'll generate a new MAC address (last 40 bits of the DPID + interpolated port 8 bits + setting 0x0e in the most significant byte to ensure unicast + locally administered)
+- When sending a PacketOut, if a interface's MAC address is invalid (all zeros or isn't an unicast address) it'll generate a new MAC address (last 40 bits of the DPID + interpolated port 8 bits + setting ``e`` in the nibble of the most significant byte to ensure unicast + locally administered)
 
 
 [2022.3.0] - 2022-12-15
