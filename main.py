@@ -17,7 +17,7 @@ from napps.kytos.of_core.msg_prios import of_msg_prio
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.managers import LivenessManager, LoopManager
 from napps.kytos.of_lldp.managers.loop_manager import LoopState
-from napps.kytos.of_lldp.utils import get_cookie
+from napps.kytos.of_lldp.utils import get_cookie, try_to_gen_intf_mac
 
 from .controllers import LivenessController
 
@@ -80,9 +80,11 @@ class Main(KytosNApp):
                 lldp.chassis_id.sub_value = DPID(switch.dpid)
                 lldp.port_id.sub_value = port_type(interface.port_number)
 
+                src_addr = try_to_gen_intf_mac(interface.address, switch.id,
+                                               interface.port_number)
                 ethernet = Ethernet()
                 ethernet.ether_type = EtherType.LLDP
-                ethernet.source = interface.address
+                ethernet.source = src_addr
                 ethernet.destination = constants.LLDP_MULTICAST_MAC
                 ethernet.data = lldp.pack()
                 # self.vlan_id == None will result in a packet with no VLAN.
