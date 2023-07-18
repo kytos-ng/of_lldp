@@ -6,6 +6,9 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+[2022.3.2] - 2023-07-18
+***********************
+
 Changed
 =======
 
