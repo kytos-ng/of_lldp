@@ -11,6 +11,7 @@ Changed
 - ``of_lldp`` now supports table group settings from ``of_multi_table``
 - ``settings.TABLE_ID`` is no longer supported, ``table_id`` is managed by ``of_multi_table``
 - When sending a PacketOut, if a interface's MAC address is invalid (all zeros or isn't an unicast address) it'll generate a new MAC address (last 40 bits of the DPID + interpolated port 8 bits + setting ``e`` in the nibble of the most significant byte to ensure unicast + locally administered)
+- Raised defaultt ``settings.FLOW_PRIORITY`` to 50000.
 
 Added
 =====
