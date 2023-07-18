@@ -6,6 +6,11 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+Changed
+=======
+
+- Raised defaultt ``settings.FLOW_PRIORITY`` to 50000.
+
 [2022.3.1] - 2023-06-28
 ***********************
 
