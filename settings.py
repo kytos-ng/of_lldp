@@ -1,6 +1,6 @@
 """Settings for the of_lldp NApp."""
 FLOW_VLAN_VID = 3799
-FLOW_PRIORITY = 1000
+FLOW_PRIORITY = 50000
 TABLE_ID = 0
 POLLING_TIME = 3
 

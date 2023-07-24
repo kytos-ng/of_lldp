@@ -6,6 +6,18 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+[2022.3.2] - 2023-07-18
+***********************
+
+Changed
+=======
+
+- Raised defaultt ``settings.FLOW_PRIORITY`` to 50000.
+
+General Information
+===================
+- To clean up lldp flows with the old priority, run the following command, then restart kytos: ``curl -H 'Content-type: application/json' -X DELETE http://127.0.0.1:8181/api/kytos/flow_manager/v2/flows/ -d '{"flows": [{"cookie": 12321848580485677056, "cookie_mask": 18374686479671623680}]}'``
+
 [2022.3.1] - 2023-06-28
 ***********************
 
