@@ -272,7 +272,6 @@ class TestMain:
         mock_ethertype.LLDP = 10
         mock_settings.FLOW_VLAN_VID = None
         mock_settings.FLOW_PRIORITY = 1500
-        mock_settings.TABLE_ID = 0
         dpid = "00:00:00:00:00:00:00:01"
 
         flow = {}
