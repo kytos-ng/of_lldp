@@ -13,6 +13,8 @@ Changed
 =======
 - ``of_lldp`` now supports table group settings from ``of_multi_table``
 - ``settings.TABLE_ID`` is no longer supported, ``table_id`` is managed by ``of_multi_table``
+- When sending a PacketOut, if a interface's MAC address is invalid (all zeros or isn't an unicast address) it'll generate a new MAC address (last 40 bits of the DPID + interpolated port 8 bits + setting ``e`` in the nibble of the most significant byte to ensure unicast + locally administered)
+- Raised defaultt ``settings.FLOW_PRIORITY`` to 50000.
 
 Added
 =====
@@ -22,6 +24,7 @@ Added
 General Information
 ===================
 - ``@rest`` endpoints are now run by ``starlette/uvicorn`` instead of ``flask/werkzeug``.
+- To clean up lldp flows with the old priority, run the following command, then restart kytos: ``curl -H 'Content-type: application/json' -X DELETE http://127.0.0.1:8181/api/kytos/flow_manager/v2/flows/ -d '{"flows": [{"cookie": 12321848580485677056, "cookie_mask": 18374686479671623680}]}'``
 
 [2022.3.0] - 2022-12-15
 ***********************
