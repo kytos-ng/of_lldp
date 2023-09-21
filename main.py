@@ -261,11 +261,11 @@ class Main(KytosNApp):
         if event_name == 'kytos/topology.switch.enabled':
             for flow in data['flows']:
                 flow.pop("cookie_mask", None)
-            res = httpx.post(endpoint, json=data)
+            res = httpx.post(endpoint, json=data, timeout=10)
         else:
-            res = httpx.delete(endpoint, json=data)
+            res = httpx.delete(endpoint, json=data, timeout=10)
 
-        if res.is_server_error:
+        if res.is_server_error or res.status_code == 424:
             raise httpx.RequestError(res.text)
 
     @alisten_to('kytos/of_core.v0x04.messages.in.ofpt_packet_in')
