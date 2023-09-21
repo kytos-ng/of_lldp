@@ -22,6 +22,7 @@ from kytos.core.link import Link
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
                                  aget_json_or_400, get_json_or_400)
 from kytos.core.retry import before_sleep
+from kytos.core.switch import Switch
 
 from .controllers import LivenessController
 
@@ -240,6 +241,7 @@ class Main(KytosNApp):
             data = {'flows': [flow]}
             try:
                 self.send_flow(switch, event.name, data=data)
+                self.used_unused_vlan(switch, event.name)
             except tenacity.RetryError:
                 msg = f"Failure from event={event.name} to send flows to"\
                       f" {switch.id}, flows:{data}"
@@ -263,6 +265,19 @@ class Main(KytosNApp):
         else:
             res = requests.delete(endpoint, json=data)
         return res.status_code
+
+    def used_unused_vlan(self, switch: Switch, event_name: str):
+        """Determine whether to use the vlan or make it available
+        base on event_name"""
+        if self.vlan_id is None:
+            return
+        tags = [self.vlan_id] * 2
+        for interface_id in switch.interfaces:
+            interface = switch.interfaces[interface_id]
+            if event_name == 'kytos/topology.switch.enabled':
+                interface.use_tags(self.controller, tags)
+            else:
+                interface.make_tags_available(self.controller, tags)
 
     @alisten_to('kytos/of_core.v0x04.messages.in.ofpt_packet_in')
     async def on_ofpt_packet_in(self, event):

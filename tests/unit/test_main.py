@@ -2,7 +2,8 @@
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from kytos.lib.helpers import (get_controller_mock, get_kytos_event_mock,
-                               get_switch_mock, get_test_client)
+                               get_switch_mock, get_test_client,
+                               get_interface_mock)
 
 from kytos.core.events import KytosEvent
 from napps.kytos.of_lldp.utils import get_cookie
@@ -198,10 +199,12 @@ class TestMain:
                                           for arg in po_args])
         mock_publish_stopped.assert_called()
 
+    @patch('napps.kytos.of_lldp.main.Main.used_unused_vlan')
     @patch('requests.delete')
     @patch('requests.post')
-    def test_handle_lldp_flows(self, mock_post, mock_delete):
+    def test_handle_lldp_flows(self, mock_post, mock_delete, use_vlan_mock):
         """Test handle_lldp_flow method."""
+        use_vlan_mock.return_value = True
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         self.napp.controller.switches = {dpid: switch}
@@ -495,3 +498,30 @@ class TestMain:
         assert "table_group" in flow
         assert "owner" in flow
         assert flow["table_id"] == 2
+
+    def test_used_unused_vlan(self):
+        """Test used_unused_vlan"""
+        event_name = "kytos/topology.switch.enabled"
+        switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+        interface_a = get_interface_mock("mock_a", 1, switch)
+        interface_a.use_tags = MagicMock()
+        interface_b = get_interface_mock("mock_b", 2, switch)
+        interface_b.use_tags = MagicMock()
+        switch.interfaces = {1: interface_a, 2: interface_b}
+        self.napp.used_unused_vlan(switch, event_name)
+        assert interface_a.use_tags.call_count == 1
+        assert interface_b.use_tags.call_count == 1
+
+        event_name = "kytos/topology.switch.disabled"
+        interface_a.make_tags_available = MagicMock()
+        interface_b.make_tags_available = MagicMock()
+        self.napp.used_unused_vlan(switch, event_name)
+        assert interface_a.make_tags_available.call_count == 1
+        assert interface_b.make_tags_available.call_count == 1
+
+        self.napp.vlan_id = None
+        self.napp.used_unused_vlan(switch, event_name)
+        assert interface_a.use_tags.call_count == 1
+        assert interface_b.use_tags.call_count == 1
+        assert interface_a.make_tags_available.call_count == 1
+        assert interface_b.make_tags_available.call_count == 1
