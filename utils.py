@@ -68,3 +68,10 @@ def _make_unicast_local_mac(address: str) -> str:
     ensures it's a unicast (b0 -> 0) and locally administered (b1 -> 1).
     """
     return address[:1] + "e" + address[2:]
+
+
+def update_flow():
+    """Changed force value after a retry"""
+    def add_force(args):
+        args.kwargs['data']['force'] = True
+    return add_force
