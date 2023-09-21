@@ -1,7 +1,7 @@
 """NApp responsible to discover new switches and hosts."""
 import struct
 
-import requests
+import httpx
 import tenacity
 from napps.kytos.of_core.msg_prios import of_msg_prio
 from napps.kytos.of_lldp import constants, settings
@@ -14,7 +14,8 @@ from pyof.foundation.network_types import LLDP, VLAN, Ethernet, EtherType
 from pyof.v0x04.common.action import ActionOutput as AO13
 from pyof.v0x04.common.port import PortNo as Port13
 from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
-from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_combine, wait_fixed, wait_random)
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import alisten_to, listen_to
@@ -240,16 +241,17 @@ class Main(KytosNApp):
             data = {'flows': [flow]}
             try:
                 self.send_flow(switch, event.name, data=data)
-            except tenacity.RetryError:
-                msg = f"Failure from event={event.name} to send flows to"\
-                      f" {switch.id}, flows:{data}"
+            except tenacity.RetryError as err:
+                msg = f"Error:{err.last_attempt.exception()} when"\
+                      f" sending flows to {switch.id}, {data}"
                 log.error(msg)
 
+    # pylint: disable=unexpected-keyword-arg
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_fixed(2),
+        wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
         before_sleep=before_sleep,
-        retry=retry_if_result(lambda code: code in {424, 500}),
+        retry=retry_if_exception_type(httpx.RequestError),
         after=update_flow(),
     )
     def send_flow(self, switch, event_name, data=None):
@@ -259,10 +261,12 @@ class Main(KytosNApp):
         if event_name == 'kytos/topology.switch.enabled':
             for flow in data['flows']:
                 flow.pop("cookie_mask", None)
-            res = requests.post(endpoint, json=data)
+            res = httpx.post(endpoint, json=data)
         else:
-            res = requests.delete(endpoint, json=data)
-        return res.status_code
+            res = httpx.delete(endpoint, json=data)
+
+        if res.is_server_error:
+            raise httpx.RequestError(res.text)
 
     @alisten_to('kytos/of_core.v0x04.messages.in.ofpt_packet_in')
     async def on_ofpt_packet_in(self, event):

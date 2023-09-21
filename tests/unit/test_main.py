@@ -198,8 +198,8 @@ class TestMain:
                                           for arg in po_args])
         mock_publish_stopped.assert_called()
 
-    @patch('requests.delete')
-    @patch('requests.post')
+    @patch('httpx.delete')
+    @patch('httpx.post')
     def test_handle_lldp_flows(self, mock_post, mock_delete):
         """Test handle_lldp_flow method."""
         dpid = "00:00:00:00:00:00:00:01"
@@ -221,7 +221,7 @@ class TestMain:
         mock_delete.assert_called()
 
     @patch("time.sleep")
-    @patch("requests.post")
+    @patch("httpx.post")
     def test_handle_lldp_flows_retries(self, mock_post, _):
         """Test handle_lldp_flow method retries."""
         dpid = "00:00:00:00:00:00:00:01"
