@@ -199,12 +199,11 @@ class TestMain:
                                           for arg in po_args])
         mock_publish_stopped.assert_called()
 
-    @patch('napps.kytos.of_lldp.main.Main.used_unused_vlan')
+    @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
     @patch('httpx.request')
     @patch('httpx.post')
-    def test_handle_lldp_flows(self, mock_post, mock_request, use_vlan_mock):
+    def test_handle_lldp_flows(self, mock_post, mock_request, mock_flows):
         """Test handle_lldp_flow method."""
-        use_vlan_mock.return_value = True
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         self.napp.controller.switches = {dpid: switch}
@@ -217,18 +216,22 @@ class TestMain:
         mock_post.return_value = MagicMock(status_code=202)
         mock_request.return_value = MagicMock(status_code=202)
 
+        mock_flows.return_value = {}
         self.napp._handle_lldp_flows(event_post)
         mock_post.assert_called()
 
+        mock_flows.return_value = {"flows": "mocked_flows"}
         self.napp._handle_lldp_flows(event_del)
         mock_request.assert_called()
 
+    @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
     @patch("time.sleep")
     @patch("httpx.post")
-    def test_handle_lldp_flows_retries(self, mock_post, _):
+    def test_handle_lldp_flows_retries(self, mock_post, _, mock_flows):
         """Test handle_lldp_flow method retries."""
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+        mock_flows.return_value = {}
         self.napp.controller.switches = {dpid: switch}
         event_post = get_kytos_event_mock(name="kytos/topology.switch.enabled",
                                           content={"dpid": dpid})
@@ -499,29 +502,36 @@ class TestMain:
         assert "owner" in flow
         assert flow["table_id"] == 2
 
-    def test_used_unused_vlan(self):
-        """Test used_unused_vlan"""
-        event_name = "kytos/topology.switch.enabled"
+    def test_use_vlan(self):
+        """Test use_vlan"""
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         interface_a = get_interface_mock("mock_a", 1, switch)
         interface_a.use_tags = MagicMock()
         interface_b = get_interface_mock("mock_b", 2, switch)
         interface_b.use_tags = MagicMock()
         switch.interfaces = {1: interface_a, 2: interface_b}
-        self.napp.used_unused_vlan(switch, event_name)
+        self.napp.use_vlan(switch)
         assert interface_a.use_tags.call_count == 1
         assert interface_b.use_tags.call_count == 1
 
-        event_name = "kytos/topology.switch.disabled"
+        self.napp.vlan_id = None
+        self.napp.use_vlan(switch)
+        assert interface_a.use_tags.call_count == 1
+        assert interface_b.use_tags.call_count == 1
+
+    def test_make_vlan_available(self):
+        """Test make_vlan_available"""
+        switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+        interface_a = get_interface_mock("mock_a", 1, switch)
         interface_a.make_tags_available = MagicMock()
+        interface_b = get_interface_mock("mock_b", 2, switch)
         interface_b.make_tags_available = MagicMock()
-        self.napp.used_unused_vlan(switch, event_name)
+        switch.interfaces = {1: interface_a, 2: interface_b}
+        self.napp.make_vlan_available(switch)
         assert interface_a.make_tags_available.call_count == 1
         assert interface_b.make_tags_available.call_count == 1
 
         self.napp.vlan_id = None
-        self.napp.used_unused_vlan(switch, event_name)
-        assert interface_a.use_tags.call_count == 1
-        assert interface_b.use_tags.call_count == 1
+        self.napp.make_vlan_available(switch)
         assert interface_a.make_tags_available.call_count == 1
         assert interface_b.make_tags_available.call_count == 1

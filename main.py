@@ -242,7 +242,6 @@ class Main(KytosNApp):
             data = {'flows': [flow]}
             try:
                 self.send_flow(switch, event.name, data=data)
-                self.used_unused_vlan(switch, event.name)
             except tenacity.RetryError as err:
                 msg = f"Error:{err.last_attempt.exception()} when"\
                       f" sending flows to {switch.id}, {data}"
@@ -260,28 +259,47 @@ class Main(KytosNApp):
         """Send flows to flow_manager to be installed/deleted"""
         destination = switch.id
         endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{destination}'
-        if event_name == 'kytos/topology.switch.enabled':
+        flows = self.get_flows_by_switch(destination)
+        if event_name == 'kytos/topology.switch.enabled' and not flows:
             for flow in data['flows']:
                 flow.pop("cookie_mask", None)
             res = httpx.post(endpoint, json=data, timeout=10)
-        else:
+            if res.is_server_error or res.status_code == 424:
+                raise httpx.RequestError(res.text)
+            self.use_vlan(switch)
+        elif event_name == 'kytos/topology.switch.disabled' and flows:
             res = httpx.request("DELETE", endpoint, json=data, timeout=10)
+            if res.is_server_error or res.status_code == 424:
+                raise httpx.RequestError(res.text)
+            self.make_vlan_available(switch)
 
-        if res.is_server_error or res.status_code == 424:
-            raise httpx.RequestError(res.text)
-
-    def used_unused_vlan(self, switch: Switch, event_name: str):
-        """Determine whether to use the vlan or make it available
-        base on event_name"""
+    def use_vlan(self, switch: Switch) -> None:
+        """Use vlan from interface"""
         if self.vlan_id is None:
             return
         tags = [self.vlan_id] * 2
         for interface_id in switch.interfaces:
             interface = switch.interfaces[interface_id]
-            if event_name == 'kytos/topology.switch.enabled':
-                interface.use_tags(self.controller, tags)
-            else:
-                interface.make_tags_available(self.controller, tags)
+            interface.use_tags(self.controller, tags)
+
+    def make_vlan_available(self, switch: Switch) -> None:
+        """Makes vlan from interface available"""
+        if self.vlan_id is None:
+            return
+        tags = [self.vlan_id] * 2
+        for interface_id in switch.interfaces:
+            interface = switch.interfaces[interface_id]
+            interface.make_tags_available(self.controller, tags)
+
+    def get_flows_by_switch(self, dpid: str) -> dict:
+        """Get of_lldp flows by switch"""
+        start = settings.COOKIE_PREFIX << 56
+        end = start | 0x00FFFFFFFFFFFFFF
+        endpoint = f'{settings.FLOW_MANAGER_URL}/stored_flows?state='\
+                   f'installed&cookie_range={start}&cookie_range={end}'\
+                   f'&dpid={dpid}'
+        res = httpx.get(endpoint)
+        return res.json()
 
     @alisten_to('kytos/of_core.v0x04.messages.in.ofpt_packet_in')
     async def on_ofpt_packet_in(self, event):
