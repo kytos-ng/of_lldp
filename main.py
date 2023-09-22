@@ -263,7 +263,7 @@ class Main(KytosNApp):
                 flow.pop("cookie_mask", None)
             res = httpx.post(endpoint, json=data, timeout=10)
         else:
-            res = httpx.delete(endpoint, json=data, timeout=10)
+            res = httpx.request("DELETE", endpoint, json=data, timeout=10)
 
         if res.is_server_error or res.status_code == 424:
             raise httpx.RequestError(res.text)
