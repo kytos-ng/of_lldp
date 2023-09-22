@@ -3,7 +3,7 @@ from collections import defaultdict
 from enum import Enum
 from threading import Lock
 
-import requests
+import httpx
 
 from kytos.core import KytosEvent, log
 from kytos.core.helpers import get_time, now
@@ -220,13 +220,13 @@ class LoopManager:
         """Add interface metadata."""
         base_url = self.settings.TOPOLOGY_URL
         endpoint = f"{base_url}/interfaces/{interface_id}/metadata"
-        return requests.post(endpoint, json=metadata)
+        return httpx.post(endpoint, json=metadata)
 
     def del_interface_metadata(self, interface_id, key):
         """Delete interface metadata."""
         base_url = self.settings.TOPOLOGY_URL
         endpoint = f"{base_url}/interfaces/{interface_id}/metadata/{key}"
-        return requests.delete(endpoint)
+        return httpx.delete(endpoint)
 
     def handle_loop_stopped(self, interface_a, interface_b):
         """Handle loop stopped."""
@@ -255,7 +255,7 @@ class LoopManager:
         if "disable" in self.actions:
             base_url = self.settings.TOPOLOGY_URL
             endpoint = f"{base_url}/interfaces/{interface_a.id}/enable"
-            response = requests.post(endpoint)
+            response = httpx.post(endpoint)
             if response.status_code != 200:
                 log.error(
                     f"Failed to enable interface: {interface_a.id},"
@@ -318,7 +318,7 @@ class LoopManager:
         intf_id = interface_a.id
         base_url = self.settings.TOPOLOGY_URL
         endpoint = f"{base_url}/interfaces/{intf_id}/disable"
-        response = requests.post(endpoint)
+        response = httpx.post(endpoint)
         if response.status_code != 200:
             log.error(
                 f"Failed to disable interface: {intf_id},"

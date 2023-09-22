@@ -200,9 +200,9 @@ class TestMain:
         mock_publish_stopped.assert_called()
 
     @patch('napps.kytos.of_lldp.main.Main.used_unused_vlan')
-    @patch('requests.delete')
-    @patch('requests.post')
-    def test_handle_lldp_flows(self, mock_post, mock_delete, use_vlan_mock):
+    @patch('httpx.request')
+    @patch('httpx.post')
+    def test_handle_lldp_flows(self, mock_post, mock_request, use_vlan_mock):
         """Test handle_lldp_flow method."""
         use_vlan_mock.return_value = True
         dpid = "00:00:00:00:00:00:00:01"
@@ -215,16 +215,16 @@ class TestMain:
                                          content={'dpid': dpid})
 
         mock_post.return_value = MagicMock(status_code=202)
-        mock_delete.return_value = MagicMock(status_code=202)
+        mock_request.return_value = MagicMock(status_code=202)
 
         self.napp._handle_lldp_flows(event_post)
         mock_post.assert_called()
 
         self.napp._handle_lldp_flows(event_del)
-        mock_delete.assert_called()
+        mock_request.assert_called()
 
     @patch("time.sleep")
-    @patch("requests.post")
+    @patch("httpx.post")
     def test_handle_lldp_flows_retries(self, mock_post, _):
         """Test handle_lldp_flow method retries."""
         dpid = "00:00:00:00:00:00:00:01"

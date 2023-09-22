@@ -119,9 +119,9 @@ class TestLoopManager(TestCase):
         mock_log.warning.call_count = 1
         assert self.loop_manager.loop_counter[dpid][(1, 2)] == 1
 
-    @patch("napps.kytos.of_lldp.managers.loop_manager.requests")
+    @patch("napps.kytos.of_lldp.managers.loop_manager.httpx")
     @patch("napps.kytos.of_lldp.managers.loop_manager.log")
-    def test_handle_disable_action(self, mock_log, mock_requests):
+    def test_handle_disable_action(self, mock_log, mock_httpx):
         """Test handle_disable_action."""
 
         dpid = "00:00:00:00:00:00:00:01"
@@ -131,14 +131,14 @@ class TestLoopManager(TestCase):
 
         response = MagicMock()
         response.status_code = 200
-        mock_requests.post.return_value = response
+        mock_httpx.post.return_value = response
         self.loop_manager.handle_disable_action(intf_a, intf_b)
-        assert mock_requests.post.call_count == 1
+        assert mock_httpx.post.call_count == 1
         assert mock_log.info.call_count == 1
 
-    @patch("napps.kytos.of_lldp.managers.loop_manager.requests")
+    @patch("napps.kytos.of_lldp.managers.loop_manager.httpx")
     @patch("napps.kytos.of_lldp.managers.loop_manager.log")
-    def test_handle_loop_stopped(self, mock_log, mock_requests):
+    def test_handle_loop_stopped(self, mock_log, mock_httpx):
         """Test handle_loop_stopped."""
 
         dpid = "00:00:00:00:00:00:00:01"
@@ -148,11 +148,11 @@ class TestLoopManager(TestCase):
 
         self.loop_manager.loop_state[dpid][(1, 2)] = {"state": "detected"}
         self.loop_manager.actions = ["log", "disable"]
-        mock_requests.post.return_value = MagicMock(status_code=200)
-        mock_requests.delete.return_value = MagicMock(status_code=200)
+        mock_httpx.post.return_value = MagicMock(status_code=200)
+        mock_httpx.delete.return_value = MagicMock(status_code=200)
         self.loop_manager.handle_loop_stopped(intf_a, intf_b)
-        assert mock_requests.delete.call_count == 1
-        assert mock_requests.post.call_count == 1
+        assert mock_httpx.delete.call_count == 1
+        assert mock_httpx.post.call_count == 1
         assert "log" in self.loop_manager.actions
         assert "disable" in self.loop_manager.actions
         assert mock_log.info.call_count == 2
@@ -193,8 +193,8 @@ class TestLoopManager(TestCase):
         self.loop_manager.handle_loop_detected(intf_a.id, dpid, port_pair)
         assert mock_add_interface_metadata.call_count == 2
 
-    @patch("napps.kytos.of_lldp.managers.loop_manager.requests")
-    def test_add_interface_metadata(self, mock_requests):
+    @patch("napps.kytos.of_lldp.managers.loop_manager.httpx")
+    def test_add_interface_metadata(self, mock_httpx):
         """Test add interface metadata."""
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock(dpid, 0x04)
@@ -206,16 +206,16 @@ class TestLoopManager(TestCase):
             "detected_at": now().strftime("%Y-%m-%dT%H:%M:%S"),
         }
         self.loop_manager.add_interface_metadata(intf_a.id, metadata)
-        assert mock_requests.post.call_count == 1
+        assert mock_httpx.post.call_count == 1
 
-    @patch("napps.kytos.of_lldp.managers.loop_manager.requests")
-    def test_del_interface_metadata(self, mock_requests):
+    @patch("napps.kytos.of_lldp.managers.loop_manager.httpx")
+    def test_del_interface_metadata(self, mock_httpx):
         """Test del interface metadata."""
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock(dpid, 0x04)
         intf_a = get_interface_mock("s1-eth1", 1, switch)
         self.loop_manager.del_interface_metadata(intf_a.id, "looped")
-        assert mock_requests.delete.call_count == 1
+        assert mock_httpx.delete.call_count == 1
 
     def test_get_stopped_loops(self):
         """Test get_stopped_loops."""
