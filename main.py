@@ -1,24 +1,28 @@
 """NApp responsible to discover new switches and hosts."""
 import struct
-import time
 
-import requests
+import httpx
+import tenacity
 from napps.kytos.of_core.msg_prios import of_msg_prio
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.managers import LivenessManager, LoopManager
 from napps.kytos.of_lldp.managers.loop_manager import LoopState
-from napps.kytos.of_lldp.utils import get_cookie, try_to_gen_intf_mac
+from napps.kytos.of_lldp.utils import (get_cookie, try_to_gen_intf_mac,
+                                       update_flow)
 from pyof.foundation.basic_types import DPID, UBInt32
 from pyof.foundation.network_types import LLDP, VLAN, Ethernet, EtherType
 from pyof.v0x04.common.action import ActionOutput as AO13
 from pyof.v0x04.common.port import PortNo as Port13
 from pyof.v0x04.controller2switch.packet_out import PacketOut as PO13
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_combine, wait_fixed, wait_random)
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import alisten_to, listen_to
 from kytos.core.link import Link
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
                                  aget_json_or_400, get_json_or_400)
+from kytos.core.retry import before_sleep
 
 from .controllers import LivenessController
 
@@ -232,46 +236,37 @@ class Main(KytosNApp):
         except AttributeError:
             of_version = None
 
-        def _retry_if_status_code(response, endpoint, data, status_codes,
-                                  retries=3, wait=2):
-            """Retry if the response is in the status_codes."""
-            if response.status_code not in status_codes:
-                return
-            if retries - 1 <= 0:
-                return
-            data = dict(data)
-            data["force"] = True
-            res = requests.post(endpoint, json=data)
-            method = res.request.method
-            if res.status_code != 202:
-                log.error(f"Failed to retry on {endpoint}, error: {res.text},"
-                          f" status: {res.status_code}, method: {method},"
-                          f" data: {data}")
-                time.sleep(wait)
-                return _retry_if_status_code(response, endpoint, data,
-                                             status_codes, retries - 1, wait)
-            log.info(f"Successfully forced {method} flows to {endpoint}")
-
         flow = self._build_lldp_flow(of_version, get_cookie(switch.dpid))
         if flow:
-            destination = switch.id
-            endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{destination}'
             data = {'flows': [flow]}
-            if event.name == 'kytos/topology.switch.enabled':
-                flow.pop("cookie_mask")
-                res = requests.post(endpoint, json=data)
-                if res.status_code != 202:
-                    log.error(f"Failed to push flows on {destination},"
-                              f" error: {res.text}, status: {res.status_code},"
-                              f" data: {data}")
-                _retry_if_status_code(res, endpoint, data, [424, 500])
-            else:
-                res = requests.delete(endpoint, json=data)
-                if res.status_code != 202:
-                    log.error(f"Failed to delete flows on {destination},"
-                              f" error: {res.text}, status: {res.status_code},"
-                              f" data: {data}")
-                _retry_if_status_code(res, endpoint, data, [424, 500])
+            try:
+                self.send_flow(switch, event.name, data=data)
+            except tenacity.RetryError as err:
+                msg = f"Error:{err.last_attempt.exception()} when"\
+                      f" sending flows to {switch.id}, {data}"
+                log.error(msg)
+
+    # pylint: disable=unexpected-keyword-arg
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
+        before_sleep=before_sleep,
+        retry=retry_if_exception_type(httpx.RequestError),
+        after=update_flow(),
+    )
+    def send_flow(self, switch, event_name, data=None):
+        """Send flows to flow_manager to be installed/deleted"""
+        destination = switch.id
+        endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{destination}'
+        if event_name == 'kytos/topology.switch.enabled':
+            for flow in data['flows']:
+                flow.pop("cookie_mask", None)
+            res = httpx.post(endpoint, json=data, timeout=10)
+        else:
+            res = httpx.request("DELETE", endpoint, json=data, timeout=10)
+
+        if res.is_server_error or res.status_code == 424:
+            raise httpx.RequestError(res.text)
 
     @alisten_to('kytos/of_core.v0x04.messages.in.ofpt_packet_in')
     async def on_ofpt_packet_in(self, event):

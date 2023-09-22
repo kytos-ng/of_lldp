@@ -198,9 +198,9 @@ class TestMain:
                                           for arg in po_args])
         mock_publish_stopped.assert_called()
 
-    @patch('requests.delete')
-    @patch('requests.post')
-    def test_handle_lldp_flows(self, mock_post, mock_delete):
+    @patch('httpx.request')
+    @patch('httpx.post')
+    def test_handle_lldp_flows(self, mock_post, mock_request):
         """Test handle_lldp_flow method."""
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
@@ -212,16 +212,16 @@ class TestMain:
                                          content={'dpid': dpid})
 
         mock_post.return_value = MagicMock(status_code=202)
-        mock_delete.return_value = MagicMock(status_code=202)
+        mock_request.return_value = MagicMock(status_code=202)
 
         self.napp._handle_lldp_flows(event_post)
         mock_post.assert_called()
 
         self.napp._handle_lldp_flows(event_del)
-        mock_delete.assert_called()
+        mock_request.assert_called()
 
     @patch("time.sleep")
-    @patch("requests.post")
+    @patch("httpx.post")
     def test_handle_lldp_flows_retries(self, mock_post, _):
         """Test handle_lldp_flow method retries."""
         dpid = "00:00:00:00:00:00:00:01"
