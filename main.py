@@ -243,6 +243,9 @@ class Main(KytosNApp):
                    "obtaining flows."
             log.error(msg)
             return
+        except ValueError as err:
+            log.error(f"Error when getting flows, error: {err}")
+            return
 
         flow = None
         if ("switch.enabled" in event.name and not installed_flows or
@@ -292,8 +295,8 @@ class Main(KytosNApp):
             interface = switch.interfaces[interface_id]
             added = interface.use_tags(self.controller, self.vlan_id)
             if not added:
-                log.warning(f"TAG {self.vlan_id} is not available in"
-                            f" {switch.id}:{interface_id}.")
+                log.error(f"TAG {self.vlan_id} is not available in"
+                          f" {switch.id}:{interface_id}.")
 
     def make_vlan_available(self, switch: Switch) -> None:
         """Makes vlan from interface available"""
@@ -316,15 +319,16 @@ class Main(KytosNApp):
     )
     def get_flows_by_switch(self, dpid: str) -> dict:
         """Get of_lldp flows by switch"""
-        error_codes = {400, 404}
         start = settings.COOKIE_PREFIX << 56
         end = start | 0x00FFFFFFFFFFFFFF
         endpoint = f'{settings.FLOW_MANAGER_URL}/stored_flows?state='\
                    f'installed&cookie_range={start}&cookie_range={end}'\
                    f'&dpid={dpid}'
         res = httpx.get(endpoint)
-        if res.is_server_error or res.status_code in error_codes:
+        if res.is_server_error or res.status_code == 404:
             raise httpx.RequestError(res.text)
+        if res.status_code == 400:
+            raise ValueError(res.json()["description"])
         return res.json()
 
     @alisten_to('kytos/of_core.v0x04.messages.in.ofpt_packet_in')
