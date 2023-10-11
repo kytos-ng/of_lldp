@@ -23,6 +23,7 @@ from kytos.core.link import Link
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
                                  aget_json_or_400, get_json_or_400)
 from kytos.core.retry import before_sleep
+from kytos.core.switch import Switch
 
 from .controllers import LivenessController
 
@@ -232,17 +233,31 @@ class Main(KytosNApp):
             dpid = event.content['dpid']
             switch = self.controller.get_switch_by_dpid(dpid)
             of_version = switch.connection.protocol.version
-
         except AttributeError:
             of_version = None
 
-        flow = self._build_lldp_flow(of_version, get_cookie(switch.dpid))
+        try:
+            installed_flows = self.get_flows_by_switch(switch.id)
+        except tenacity.RetryError as err:
+            msg = f"Error: {err.last_attempt.exception()} when "\
+                   "obtaining flows."
+            log.error(msg)
+            return
+        except ValueError as err:
+            log.error(f"Error when getting flows, error: {err}")
+            return
+
+        flow = None
+        if ("switch.enabled" in event.name and not installed_flows or
+                "switch.disabled" in event.name and installed_flows):
+            flow = self._build_lldp_flow(of_version, get_cookie(switch.dpid))
+
         if flow:
             data = {'flows': [flow]}
             try:
                 self.send_flow(switch, event.name, data=data)
             except tenacity.RetryError as err:
-                msg = f"Error:{err.last_attempt.exception()} when"\
+                msg = f"Error: {err.last_attempt.exception()} when"\
                       f" sending flows to {switch.id}, {data}"
                 log.error(msg)
 
@@ -256,17 +271,65 @@ class Main(KytosNApp):
     )
     def send_flow(self, switch, event_name, data=None):
         """Send flows to flow_manager to be installed/deleted"""
-        destination = switch.id
-        endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{destination}'
+        endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{switch.id}'
+        client_error = {424, 404, 400}
         if event_name == 'kytos/topology.switch.enabled':
             for flow in data['flows']:
                 flow.pop("cookie_mask", None)
             res = httpx.post(endpoint, json=data, timeout=10)
-        else:
-            res = httpx.request("DELETE", endpoint, json=data, timeout=10)
+            if res.is_server_error or res.status_code in client_error:
+                raise httpx.RequestError(res.text)
+            self.use_vlan(switch)
 
-        if res.is_server_error or res.status_code == 424:
+        elif event_name == 'kytos/topology.switch.disabled':
+            res = httpx.request("DELETE", endpoint, json=data, timeout=10)
+            if res.is_server_error or res.status_code in client_error:
+                raise httpx.RequestError(res.text)
+            self.make_vlan_available(switch)
+
+    def use_vlan(self, switch: Switch) -> None:
+        """Use vlan from interface"""
+        if self.vlan_id is None:
+            return
+        for interface_id in switch.interfaces:
+            interface = switch.interfaces[interface_id]
+            added = interface.use_tags(self.controller, self.vlan_id)
+            if not added:
+                log.error(f"TAG {self.vlan_id} is not available in"
+                          f" {switch.id}:{interface_id}.")
+
+    def make_vlan_available(self, switch: Switch) -> None:
+        """Makes vlan from interface available"""
+        if self.vlan_id is None:
+            return
+        for interface_id in switch.interfaces:
+            interface = switch.interfaces[interface_id]
+            added = interface.make_tags_available(
+                self.controller, self.vlan_id
+            )
+            if not added:
+                log.warning(f"Tag {self.vlan_id} was already available"
+                            f" in {switch.id}:{interface_id}")
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
+        before_sleep=before_sleep,
+        retry=retry_if_exception_type(httpx.RequestError),
+    )
+    def get_flows_by_switch(self, dpid: str) -> dict:
+        """Get of_lldp flows by switch"""
+        start = settings.COOKIE_PREFIX << 56
+        end = start | 0x00FFFFFFFFFFFFFF
+        endpoint = f'{settings.FLOW_MANAGER_URL}/stored_flows?state='\
+                   f'installed&cookie_range={start}&cookie_range={end}'\
+                   f'&dpid={dpid}'
+        res = httpx.get(endpoint)
+        if res.is_server_error or res.status_code == 404:
             raise httpx.RequestError(res.text)
+        if res.status_code == 400:
+            raise ValueError(res.json()["description"])
+        return res.json()
 
     @alisten_to('kytos/of_core.v0x04.messages.in.ofpt_packet_in')
     async def on_ofpt_packet_in(self, event):

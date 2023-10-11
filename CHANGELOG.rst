@@ -6,6 +6,10 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+Changed
+=======
+- ``FLOW_VLAN_VID`` from settings now is used or made available in all interfaces from the switch where a flow is created or deleted.
+
 [2023.1.0] - 2023-06-05
 ***********************
 
