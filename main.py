@@ -18,8 +18,7 @@ from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_combine, wait_fixed, wait_random)
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
-from kytos.core.exceptions import (KytosTagsAreNotAvailable,
-                                   KytosTagsNotInTagRanges)
+from kytos.core.exceptions import KytosTagError
 from kytos.core.helpers import alisten_to, listen_to
 from kytos.core.link import Link
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
@@ -297,7 +296,7 @@ class Main(KytosNApp):
             interface = switch.interfaces[interface_id]
             try:
                 interface.use_tags(self.controller, self.vlan_id)
-            except KytosTagsAreNotAvailable as err:
+            except KytosTagError as err:
                 log.error(err)
 
     def make_vlan_available(self, switch: Switch) -> None:
@@ -313,7 +312,7 @@ class Main(KytosNApp):
                 if conflict:
                     log.warning(f"Tags {conflict} was already available"
                                 f" in {switch.id}:{interface_id}")
-            except KytosTagsNotInTagRanges as err:
+            except KytosTagError as err:
                 log.error(err)
 
     @retry(
