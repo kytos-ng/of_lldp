@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 from httpx import RequestError
 from kytos.core.events import KytosEvent
+from kytos.core.exceptions import (KytosTagsNotInTagRanges,
+                                   KytosTagsAreNotAvailable)
 from kytos.lib.helpers import (get_controller_mock, get_interface_mock,
                                get_kytos_event_mock, get_switch_mock,
                                get_test_client)
@@ -542,7 +544,7 @@ class TestMain:
         assert interface_a.use_tags.call_count == 1
         assert interface_b.use_tags.call_count == 1
 
-        interface_a.use_tags.return_value = False
+        interface_a.use_tags.side_effect = KytosTagsAreNotAvailable([], "1")
         self.napp.use_vlan(switch)
         assert interface_a.use_tags.call_count == 2
         assert interface_b.use_tags.call_count == 2
@@ -559,14 +561,18 @@ class TestMain:
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         interface_a = get_interface_mock("mock_a", 1, switch)
         interface_a.make_tags_available = MagicMock()
+        a_make_ava = interface_a.make_tags_available
+        a_make_ava.return_value = []
         interface_b = get_interface_mock("mock_b", 2, switch)
         interface_b.make_tags_available = MagicMock()
+        b_make_ava = interface_b.make_tags_available
+        b_make_ava.return_value = []
         switch.interfaces = {1: interface_a, 2: interface_b}
         self.napp.make_vlan_available(switch)
         assert interface_a.make_tags_available.call_count == 1
         assert interface_b.make_tags_available.call_count == 1
 
-        interface_a.make_tags_available.return_value = False
+        a_make_ava.return_value = [[3799, 3799]]
         self.napp.make_vlan_available(switch)
         assert interface_a.make_tags_available.call_count == 2
         assert interface_b.make_tags_available.call_count == 2
@@ -576,6 +582,15 @@ class TestMain:
         self.napp.make_vlan_available(switch)
         assert interface_a.make_tags_available.call_count == 2
         assert interface_b.make_tags_available.call_count == 2
+
+        self.napp.vlan_id = 3799
+        b_make_ava.side_effect = KytosTagsNotInTagRanges(
+            [[3799, 3799]], "01:2"
+        )
+        self.napp.make_vlan_available(switch)
+        assert interface_a.make_tags_available.call_count == 3
+        assert interface_b.make_tags_available.call_count == 3
+        assert mock_log.error.call_count == 1
 
     @patch('httpx.get')
     def test_get_flows_by_switch_retry(self, mock_get):
