@@ -355,13 +355,13 @@ class TestMain:
         count = self.napp.liveness_controller.get_enabled_interfaces.call_count
         assert count == 1
 
-    def test_handle_topology_loaded(self) -> None:
+    async def test_handle_topology_loaded(self) -> None:
         """Test handle_topology_loaded."""
         event = KytosEvent("kytos/topology.topology_loaded",
                            content={"topology": {}})
         self.napp.load_liveness = MagicMock()
         self.napp.loop_manager.handle_topology_loaded = MagicMock()
-        self.napp.handle_topology_loaded(event)
+        await self.napp.on_topology_loaded(event)
         assert self.napp.loop_manager.handle_topology_loaded.call_count == 1
         assert self.napp.load_liveness.call_count == 1
 
