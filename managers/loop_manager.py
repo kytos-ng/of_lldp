@@ -1,11 +1,12 @@
 """LoopManager."""
+import asyncio
 from collections import defaultdict
 from enum import Enum
-from threading import Lock
 
 import httpx
 
 from kytos.core import KytosEvent, log
+from kytos.core.interface import Interface
 from kytos.core.helpers import get_time, now
 from napps.kytos.of_lldp import settings as napp_settings
 
@@ -23,7 +24,7 @@ class LoopManager:
     def __init__(self, controller, settings=napp_settings):
         """Constructor of LoopDetection."""
         self.controller = controller
-        self.loop_lock = Lock()
+        self.loop_lock = asyncio.Lock()
         self.loop_counter = defaultdict(dict)
         self.loop_state = defaultdict(dict)
 
@@ -70,6 +71,7 @@ class LoopManager:
                 not self.is_loop_ignored(dpid_a, port_a, port_b),
             )
         ):
+            await self.set_loop_detected(interface_a, [port_a, port_b])
             await self.apublish_loop_state(
                 interface_a, interface_b, LoopState.detected.value
             )
@@ -134,11 +136,11 @@ class LoopManager:
             )
             await self.controller.buffers.app.aput(event)
 
-    def handle_loop_detected(self, interface_id, dpid, port_pair):
-        """Handle loop detected."""
+    async def set_loop_detected(self, interface_a: Interface, port_pair: list):
+        """Set loop detected."""
         is_new_loop = False
-        port_pair = tuple(port_pair)
-        with self.loop_lock:
+        port_pair, dpid = tuple(port_pair), interface_a.switch.dpid
+        async with self.loop_lock:
             if port_pair not in self.loop_state[dpid]:
                 dt_at = now().strftime("%Y-%m-%dT%H:%M:%S")
                 data = {
@@ -165,21 +167,17 @@ class LoopManager:
             else:
                 data = {"updated_at": now().strftime("%Y-%m-%dT%H:%M:%S")}
                 self.loop_state[dpid][port_pair].update(data)
-        if is_new_loop:
-            port_numbers = self.loop_state[dpid][port_pair]["port_numbers"]
-            detected_at = self.loop_state[dpid][port_pair]["detected_at"]
-            metadata = {
-                "looped": {
-                    "port_numbers": port_numbers,
-                    "detected_at": detected_at,
+
+            if is_new_loop:
+                port_numbers = self.loop_state[dpid][port_pair]["port_numbers"]
+                detected_at = self.loop_state[dpid][port_pair]["detected_at"]
+                metadata = {
+                    "looped": {
+                        "port_numbers": port_numbers,
+                        "detected_at": detected_at,
+                    }
                 }
-            }
-            response = self.add_interface_metadata(interface_id, metadata)
-            if response.status_code != 201:
-                log.error(
-                    f"Failed to add metadata {metadata} on interface "
-                    f"{interface_id}, response: {response.json()}"
-                )
+                interface_a.extend_metadata(metadata)
 
     def has_loop_stopped(self, dpid, port_pair):
         """Check if a loop has stopped by checking within an interval
@@ -205,7 +203,7 @@ class LoopManager:
     def get_stopped_loops(self):
         """Get stopped loops."""
         stopped_loops = {}
-        for key, state_dict in self.loop_state.items():
+        for key, state_dict in self.loop_state.copy().items():
             for port_pair, values in state_dict.items():
                 if values["state"] != LoopState.detected.value:
                     continue
@@ -216,28 +214,18 @@ class LoopManager:
                         stopped_loops[key].append(port_pair)
         return stopped_loops
 
-    def add_interface_metadata(self, interface_id, metadata):
-        """Add interface metadata."""
-        base_url = self.settings.TOPOLOGY_URL
-        endpoint = f"{base_url}/interfaces/{interface_id}/metadata"
-        return httpx.post(endpoint, json=metadata)
-
-    def del_interface_metadata(self, interface_id, key):
-        """Delete interface metadata."""
-        base_url = self.settings.TOPOLOGY_URL
-        endpoint = f"{base_url}/interfaces/{interface_id}/metadata/{key}"
-        return httpx.delete(endpoint)
-
-    def handle_loop_stopped(self, interface_a, interface_b):
+    async def handle_loop_stopped(self, interface_a: Interface,
+                                  interface_b: Interface):
         """Handle loop stopped."""
         dpid = interface_a.switch.dpid
         port_a = interface_a.port_number
         port_b = interface_b.port_number
         port_pair = (port_a, port_b)
 
-        if port_pair not in self.loop_state[dpid]:
-            return
-        with self.loop_lock:
+        async with self.loop_lock:
+            if port_pair not in self.loop_state[dpid]:
+                return
+
             dt_at = now().strftime("%Y-%m-%dT%H:%M:%S")
             data = {
                 "state": "stopped",
@@ -245,6 +233,12 @@ class LoopManager:
                 "stopped_at": dt_at,
             }
             self.loop_state[dpid][port_pair].update(data)
+            key = "looped"
+            if not interface_a.remove_metadata(key):
+                log.error(
+                    f"Failed to delete metadata key {key} on interface: "
+                    f"{interface_a.id}",
+                )
 
         if "log" in self.actions:
             log.info(
@@ -254,30 +248,29 @@ class LoopManager:
             )
         if "disable" in self.actions:
             base_url = self.settings.TOPOLOGY_URL
-            endpoint = f"{base_url}/interfaces/{interface_a.id}/enable"
-            response = httpx.post(endpoint)
-            if response.status_code != 200:
-                log.error(
-                    f"Failed to enable interface: {interface_a.id},"
-                    f" status code: {response.status_code}"
-                )
-            else:
-                log.info(
-                    "LLDP loop detection enabled interface "
-                    f"{interface_a.id}, looped interfaces: "
-                    f"{[interface_a.name, interface_b.name]},"
-                    f"port_numbers: {[port_a, port_b]}"
-                )
+            async with httpx.AsyncClient(base_url=base_url) as client:
+                endpoint = f"/interfaces/{interface_a.id}/enable"
+                try:
+                    resp = await client.post(endpoint, timeout=10)
+                    if resp.status_code != 200:
+                        log.error(
+                            f"Failed to enable interface: {interface_a.id},"
+                            f" status code: {resp.status_code}, {resp.text}"
+                        )
+                    else:
+                        log.info(
+                            "LLDP loop detection enabled interface "
+                            f"{interface_a.id}, looped interfaces: "
+                            f"{[interface_a.name, interface_b.name]},"
+                            f"port_numbers: {[port_a, port_b]}"
+                        )
+                except httpx.RequestError as exc:
+                    log.error(
+                        f"Failed to enable interface: {interface_a.id}, "
+                        f"error: {exc}"
+                    )
 
-        key = "looped"
-        response = self.del_interface_metadata(interface_a.id, key)
-        if response.status_code >= 400 and response.status_code != 404:
-            log.error(
-                f"Failed to delete metadata key {key} on interface: "
-                f"{interface_a.id}, status code: {response.status_code}",
-            )
-
-    def handle_log_action(
+    async def handle_log_action(
         self,
         interface_a,
         interface_b,
@@ -288,7 +281,7 @@ class LoopManager:
         port_b = interface_b.port_number
         port_pair = (port_a, port_b)
         log_every = self.log_every
-        with self.loop_lock:
+        async with self.loop_lock:
             if port_pair not in self.loop_counter[dpid]:
                 self.loop_counter[dpid][port_pair] = 0
             else:
@@ -304,7 +297,7 @@ class LoopManager:
             f"port_numbers: {[port_a, port_b]}"
         )
 
-    def handle_disable_action(
+    async def handle_disable_action(
         self,
         interface_a,
         interface_b,
@@ -317,29 +310,37 @@ class LoopManager:
         port_b = interface_b.port_number
         intf_id = interface_a.id
         base_url = self.settings.TOPOLOGY_URL
-        endpoint = f"{base_url}/interfaces/{intf_id}/disable"
-        response = httpx.post(endpoint)
-        if response.status_code != 200:
-            log.error(
-                f"Failed to disable interface: {intf_id},"
-                f" status code: {response.status_code}"
-            )
-            return
+        async with httpx.AsyncClient(base_url=base_url) as client:
+            endpoint = f"/interfaces/{intf_id}/disable"
+            try:
+                resp = await client.post(endpoint, timeout=10)
+                if resp.status_code != 200:
+                    log.error(
+                        f"Failed to disable interface: {intf_id},"
+                        f" status code: {resp.status_code}, {resp.text}"
+                    )
+                    return
 
-        log.info(
-            f"LLDP loop detection disabled interface {interface_a.id}, "
-            f"looped interfaces: {[interface_a.name, interface_b.name]}, "
-            f"port_numbers: {[port_a, port_b]}"
-        )
+                log.info(
+                    "LLDP loop detection disabled interface "
+                    f"{interface_a.id}, looped interfaces: "
+                    f"{[interface_a.name, interface_b.name]}, "
+                    f"port_numbers: {[port_a, port_b]}"
+                )
+            except httpx.RequestError as exc:
+                log.error(
+                    f"Failed to disable interface: {interface_a.id}, "
+                    f"error: {exc}"
+                )
 
-    def handle_switch_metadata_changed(self, switch):
+    async def handle_switch_metadata_changed(self, switch):
         """Handle switch metadata changed."""
         if "ignored_loops" not in switch.metadata:
-            with self.loop_lock:
+            async with self.loop_lock:
                 return self.ignored_loops.pop(switch.dpid, None)
-        return self.try_to_load_ignored_switch(switch)
+        return await self.try_to_load_ignored_switch(switch)
 
-    def try_to_load_ignored_switch(self, switch):
+    async def try_to_load_ignored_switch(self, switch):
         """Try to load an ignored switch."""
         if "ignored_loops" not in switch.metadata:
             return
@@ -347,13 +348,13 @@ class LoopManager:
             return
 
         dpid = switch.dpid
-        with self.loop_lock:
+        async with self.loop_lock:
             self.ignored_loops[dpid] = []
             for port_pair in switch.metadata["ignored_loops"]:
                 if isinstance(port_pair, list):
                     self.ignored_loops[dpid].append(port_pair)
 
-    def handle_topology_loaded(self, topology):
+    async def handle_topology_loaded(self, topology):
         """Handle on topology loaded."""
         for switch in topology.switches.values():
-            self.try_to_load_ignored_switch(switch)
+            await self.try_to_load_ignored_switch(switch)

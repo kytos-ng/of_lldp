@@ -170,30 +170,22 @@ class Main(KytosNApp):
         """
         self._handle_lldp_flows(event)
 
-    @listen_to("kytos/of_lldp.loop.action.log")
-    def on_lldp_loop_log_action(self, event):
+    @alisten_to("kytos/of_lldp.loop.action.log")
+    async def on_lldp_loop_log_action(self, event: KytosEvent):
         """Handle LLDP loop log action."""
         interface_a = event.content["interface_a"]
         interface_b = event.content["interface_b"]
-        self.loop_manager.handle_log_action(interface_a, interface_b)
+        await self.loop_manager.handle_log_action(interface_a, interface_b)
 
-    @listen_to("kytos/of_lldp.loop.action.disable")
-    def on_lldp_loop_disable_action(self, event):
+    @alisten_to("kytos/of_lldp.loop.action.disable")
+    async def on_lldp_loop_disable_action(self, event: KytosEvent):
         """Handle LLDP loop disable action."""
         interface_a = event.content["interface_a"]
         interface_b = event.content["interface_b"]
-        self.loop_manager.handle_disable_action(interface_a, interface_b)
+        await self.loop_manager.handle_disable_action(interface_a, interface_b)
 
-    @listen_to("kytos/of_lldp.loop.detected")
-    def on_lldp_loop_detected(self, event):
-        """Handle LLDP loop detected."""
-        interface_id = event.content["interface_id"]
-        dpid = event.content["dpid"]
-        port_pair = event.content["port_numbers"]
-        self.loop_manager.handle_loop_detected(interface_id, dpid, port_pair)
-
-    @listen_to("kytos/of_lldp.loop.stopped")
-    def on_lldp_loop_stopped(self, event):
+    @alisten_to("kytos/of_lldp.loop.stopped")
+    async def on_lldp_loop_stopped(self, event: KytosEvent):
         """Handle LLDP loop stopped."""
         dpid = event.content["dpid"]
         port_pair = event.content["port_numbers"]
@@ -201,27 +193,24 @@ class Main(KytosNApp):
             switch = self.controller.get_switch_by_dpid(dpid)
             interface_a = switch.interfaces[port_pair[0]]
             interface_b = switch.interfaces[port_pair[1]]
-            self.loop_manager.handle_loop_stopped(interface_a, interface_b)
+            await self.loop_manager.handle_loop_stopped(interface_a,
+                                                        interface_b)
         except (KeyError, AttributeError) as exc:
             log.error("on_lldp_loop_stopped failed with: "
                       f"{event.content} {str(exc)}")
 
-    @listen_to("kytos/topology.topology_loaded")
-    def on_topology_loaded(self, event):
-        """Handle on topology loaded."""
-        self.handle_topology_loaded(event)
-
-    def handle_topology_loaded(self, event) -> None:
+    @alisten_to("kytos/topology.topology_loaded")
+    async def on_topology_loaded(self, event):
         """Handle on topology loaded."""
         topology = event.content["topology"]
-        self.loop_manager.handle_topology_loaded(topology)
+        await self.loop_manager.handle_topology_loaded(topology)
         self.load_liveness()
 
-    @listen_to("kytos/topology.switches.metadata.(added|removed)")
-    def on_switches_metadata_changed(self, event):
+    @alisten_to("kytos/topology.switches.metadata.(added|removed)")
+    async def on_switches_metadata_changed(self, event):
         """Handle on switches metadata changed."""
         switch = event.content["switch"]
-        self.loop_manager.handle_switch_metadata_changed(switch)
+        await self.loop_manager.handle_switch_metadata_changed(switch)
 
     def _handle_lldp_flows(self, event):
         """Install or remove flows in a switch.

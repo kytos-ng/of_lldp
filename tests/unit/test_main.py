@@ -1,8 +1,7 @@
 """Test Main methods."""
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
-import pytest
-from httpx import RequestError
+from httpx import Response
 from kytos.core.events import KytosEvent
 from kytos.core.exceptions import (KytosTagsNotInTagRanges,
                                    KytosTagsAreNotAvailable)
@@ -205,9 +204,7 @@ class TestMain:
         mock_publish_stopped.assert_called()
 
     @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
-    @patch('httpx.request')
-    @patch('httpx.post')
-    def test_handle_lldp_flows(self, mock_post, mock_request, mock_flows):
+    def test_handle_lldp_flows(self, mock_flows, monkeypatch):
         """Test handle_lldp_flow method."""
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
@@ -218,25 +215,33 @@ class TestMain:
         event_del = get_kytos_event_mock(name='kytos/topology.switch.disabled',
                                          content={'dpid': dpid})
 
-        mock_post.return_value = MagicMock(status_code=202)
-        mock_request.return_value = MagicMock(status_code=202)
+        mock_post, mock_del = MagicMock(), MagicMock()
+        mock_post.return_value = Response(status_code=202)
+        mock_del.return_value = Response(status_code=202)
+        monkeypatch.setattr("httpx.post", mock_post)
+        monkeypatch.setattr("httpx.request", mock_del)
 
         mock_flows.return_value = {}
+        self.napp.use_vlan = MagicMock()
         self.napp._handle_lldp_flows(event_post)
         mock_post.assert_called()
+        self.napp.use_vlan.assert_called_with(switch)
 
         mock_flows.return_value = {"flows": "mocked_flows"}
+        self.napp.make_vlan_available = MagicMock()
         self.napp._handle_lldp_flows(event_del)
-        mock_request.assert_called()
+        mock_del.assert_called()
+        self.napp.make_vlan_available.assert_called_with(switch)
 
     @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
     @patch("time.sleep")
-    @patch("httpx.post")
-    def test_handle_lldp_flows_retries(self, mock_post, _, mock_flows):
+    def test_handle_lldp_flows_retries(self, _, mock_flows, monkeypatch):
         """Test handle_lldp_flow method retries."""
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         mock_flows.return_value = {}
+        mock_post = MagicMock()
+        monkeypatch.setattr("httpx.post", mock_post)
         self.napp.controller.switches = {dpid: switch}
         event_post = get_kytos_event_mock(name="kytos/topology.switch.enabled",
                                           content={"dpid": dpid})
@@ -250,26 +255,29 @@ class TestMain:
         assert mock_post.call_count == 3
 
     @patch('napps.kytos.of_lldp.main.log')
-    @patch('httpx.get')
-    def test_handle_lldp_flows_request_value_error(self, mock_get, mock_log):
+    def test_handle_lldp_flows_request_value_error(self, mock_log,
+                                                   monkeypatch):
         """Test _handle_lldp_flows"""
         dpid = "00:00:00:00:00:00:00:01"
+        mock_get = MagicMock()
         mock_get.return_value = MagicMock(
             status_code=400, is_server_error=False
         )
         event_post = get_kytos_event_mock(name='kytos/topology.switch.enabled',
                                           content={'dpid': dpid})
+        monkeypatch.setattr("httpx.get", mock_get)
         self.napp._handle_lldp_flows(event_post)
         assert mock_log.error.call_count == 1
 
     @patch('napps.kytos.of_lldp.main.log')
-    @patch('napps.kytos.of_lldp.main.httpx')
-    def test_handle_lldp_flows_request_error(self, mock_httpx, mock_log):
+    def test_handle_lldp_flows_request_error(self, mock_log):
         """Test _handle_lldp_flows"""
         dpid = "00:00:00:00:00:00:00:01"
         event_post = get_kytos_event_mock(name='kytos/topology.switch.enabled',
                                           content={'dpid': dpid})
-        mock_httpx.get.side_effect = RequestError(message="mocked error")
+        self.napp.get_flows_by_switch = MagicMock()
+        exc = RetryError(MagicMock())
+        self.napp.get_flows_by_switch.side_effect = exc
         self.napp._handle_lldp_flows(event_post)
         assert mock_log.error.call_count == 1
 
@@ -355,13 +363,13 @@ class TestMain:
         count = self.napp.liveness_controller.get_enabled_interfaces.call_count
         assert count == 1
 
-    def test_handle_topology_loaded(self) -> None:
-        """Test handle_topology_loaded."""
+    async def test_on_topology_loaded(self) -> None:
+        """Test on_topology_loaded."""
         event = KytosEvent("kytos/topology.topology_loaded",
                            content={"topology": {}})
         self.napp.load_liveness = MagicMock()
-        self.napp.loop_manager.handle_topology_loaded = MagicMock()
-        self.napp.handle_topology_loaded(event)
+        self.napp.loop_manager.handle_topology_loaded = AsyncMock()
+        await self.napp.on_topology_loaded(event)
         assert self.napp.loop_manager.handle_topology_loaded.call_count == 1
         assert self.napp.load_liveness.call_count == 1
 
@@ -592,21 +600,11 @@ class TestMain:
         assert interface_b.make_tags_available.call_count == 3
         assert mock_log.error.call_count == 1
 
-    @patch('httpx.get')
-    def test_get_flows_by_switch_retry(self, mock_get):
-        """Test get_flows_by_switch retry"""
-        dpid = "00:00:00:00:00:00:00:01"
-        mock_get.return_value = MagicMock(
-            status_code=400, text="mock_error"
-        )
-        with pytest.raises(RetryError):
-            self.napp.get_flows_by_switch(dpid)
-        assert mock_get.call_count == 3
-
-    @patch('httpx.post')
     @patch('napps.kytos.of_lldp.main.Main.use_vlan')
-    def test_send_flow_enabled(self, mock_use, mock_post):
+    def test_send_flow_enabled(self, mock_use, monkeypatch):
         """Test send_flows when switch is enabled"""
+        mock_post = MagicMock()
+        monkeypatch.setattr("httpx.post", mock_post)
         mock_post.return_value = MagicMock(
             status_code=202, is_server_error=False
         )
@@ -619,10 +617,11 @@ class TestMain:
         assert mock_use.call_args[0][0] == switch
         assert data['flows'] == [{}]
 
-    @patch('httpx.request')
     @patch('napps.kytos.of_lldp.main.Main.make_vlan_available')
-    def test_send_flow_disabled(self, mock_avaialble, mock_request):
+    def test_send_flow_disabled(self, mock_avaialble, monkeypatch):
         """Test send_flows when switch is disabled"""
+        mock_request = MagicMock()
+        monkeypatch.setattr("httpx.request", mock_request)
         mock_request.return_value = MagicMock(
             status_code=202, is_server_error=False
         )
