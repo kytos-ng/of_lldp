@@ -12,12 +12,12 @@ class DocumentBaseModel(BaseModel):
     """DocumentBaseModel."""
 
     id: str = Field(None, alias="_id")
-    inserted_at: Optional[datetime]
-    updated_at: Optional[datetime]
+    inserted_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    def dict(self, **kwargs) -> dict:
+    def model_dump(self, **kwargs) -> dict:
         """Model to dict."""
-        values = super().dict(**kwargs)
+        values = super().model_dump(**kwargs)
         if "id" in values and values["id"]:
             values["_id"] = values["id"]
         if "exclude" in kwargs and "_id" in kwargs["exclude"]:

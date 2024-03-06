@@ -75,7 +75,9 @@ class LivenessController:
                     **{"_id": interface_id, "updated_at": utc_now},
                 }
             )
-            payload = model.dict(exclude={"inserted_at"}, exclude_none=True)
+            payload = model.model_dump(
+                exclude={"inserted_at"}, exclude_none=True
+            )
             ops.append(
                 UpdateOne(
                     {"_id": interface_id},
