@@ -8,6 +8,14 @@ All notable changes to the of_lldp NApp will be documented in this file.
 
 Changed
 =======
+- Updated python environment installation from 3.9 to 3.11
+- Updated test dependencies
+
+[UNRELEASED] - Under development
+********************************
+
+Changed
+=======
 - ``FLOW_VLAN_VID`` from settings now is used or made available in all interfaces from the switch where a flow is created or deleted.
 
 [2023.1.0] - 2023-06-05
