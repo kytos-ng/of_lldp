@@ -254,7 +254,7 @@ setup(name=f'kytos_{NAPP_NAME}',
       author='Kytos Team',
       author_email='of-ng-dev@ncc.unesp.br',
       license='MIT',
-      install_requires=read_requirements() + ['setuptools >= 36.0.1'],
+      install_requires=read_requirements() + ['importlib_metadata'],
       packages=[],
       cmdclass={
           'clean': Cleaner,
