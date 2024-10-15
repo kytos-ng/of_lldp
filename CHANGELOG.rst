@@ -10,14 +10,12 @@ Added
 =====
 - ``LIVENESS_MIN_HELLOS_UP = 2`` is now supported on settings to configure the number of minimum liveness hellos expected before considering ``up``. This is to contribute to stability before considering it ``up``. If ``LIVENESS_MIN_HELLOS_UP = 1`` then it means the old behavior where a single hello received on both ends would transition to ``up``.
 
-
-[2023.2.0] - 2024-02-16
+[2024.1.0] - 2024-07-23
 ***********************
 
 Changed
 =======
 - Updated python environment installation from 3.9 to 3.11
-- Updated test dependencies
 
 [2023.2.0] - 2024-02-16
 ***********************
