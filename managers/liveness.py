@@ -3,6 +3,7 @@ from typing import Optional, Tuple
 from datetime import datetime
 from kytos.core import KytosEvent, log
 from kytos.core.common import EntityStatus
+from napps.kytos.of_lldp import settings as napp_settings
 
 
 class ILSM:
@@ -14,7 +15,7 @@ class ILSM:
     this state machine should call the transition accordingly.
     """
 
-    def __init__(self, state="init") -> None:
+    def __init__(self, state="init", min_hellos=1) -> None:
         """InterfaceLivenessStateMachine."""
         self.transitions = {
             "init": ["up", "down"],
@@ -22,6 +23,10 @@ class ILSM:
             "down": ["up", "init"],
         }
         self.state = state
+        self.min_hellos = min_hellos
+        assert self.min_hellos >= 1, self.min_hellos
+        assert self.state in self.transitions, self.state
+        self.hello_counter = 0
         self.last_hello_at: Optional[datetime] = None
 
     def __repr__(self) -> str:
@@ -41,13 +46,17 @@ class ILSM:
             self.last_hello_at and
             (datetime.utcnow() - self.last_hello_at).seconds > dead_interval
         ):
+            self.hello_counter = 0
             return self.transition_to("down")
         return None
 
     def consume_hello(self, received_at: datetime) -> Optional[str]:
         """Consume hello. It must be called on every received hello."""
         self.last_hello_at = received_at
-        if self.transition_to("up"):
+        if self.state != "up":
+            self.hello_counter += 1
+        if self.hello_counter >= self.min_hellos and self.transition_to("up"):
+            self.hello_counter = 0
             return "up"
         return None
 
@@ -93,7 +102,7 @@ class LivenessManager:
 
     """LivenessManager."""
 
-    def __init__(self, controller) -> None:
+    def __init__(self, controller, settings=napp_settings) -> None:
         """LivenessManager."""
 
         self.controller = controller
@@ -101,6 +110,7 @@ class LivenessManager:
         self.interfaces = {}  # liveness enabled
         self.liveness = {}  # indexed by the lowest interface id of the pair
         self.liveness_ids = {}  # interface id to lowest id of the pair
+        self.settings = settings
 
     @classmethod
     def link_status_hook_liveness(cls, link) -> Optional[EntityStatus]:
@@ -183,7 +193,11 @@ class LivenessManager:
         min_id = min(interface_a.id, interface_b.id)
         is_interface_a_min_id = min_id == interface_a.id
         if min_id not in self.liveness:
-            lsm = LSM(ILSM(state="init"), ILSM(state="init"))
+            min_hellos = self.settings.LIVENESS_MIN_HELLOS_UP
+            lsm = LSM(
+                ILSM(state="init", min_hellos=min_hellos),
+                ILSM(state="init", min_hellos=min_hellos)
+            )
             entry = {
                 "lsm": lsm,
             }
@@ -203,8 +217,9 @@ class LivenessManager:
                 """
                 Implies that the topology connection has changed, needs new ref
                 """
+                min_hellos = self.settings.LIVENESS_MIN_HELLOS_UP
                 entry["interface_b"] = interface_b
-                entry["lsm"].ilsm_b = ILSM(state="init")
+                entry["lsm"].ilsm_b = ILSM(state="init", min_hellos=min_hellos)
         else:
             lsm.ilsm_b.consume_hello(received_at)
 
