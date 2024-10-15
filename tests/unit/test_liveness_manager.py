@@ -51,6 +51,28 @@ class TestILSM:
         assert ilsm.state == "up"
         assert ilsm.last_hello_at == received_at
 
+    def test_min_hellos(self) -> None:
+        """Test consume_hello min hellos."""
+        min_hellos = 3
+        assert min_hellos >= 2
+        ilsm = ILSM(state="init", min_hellos=min_hellos)
+        assert ilsm.state == "init"
+        assert ilsm.hello_counter == 0
+
+        # it shouldn't transition on the first min_hellos - 1
+        for i in range(min_hellos - 1):
+            received_at = datetime.utcnow()
+            assert not ilsm.consume_hello(received_at)
+            assert ilsm.state == "init"
+            assert ilsm.last_hello_at == received_at
+            assert ilsm.hello_counter == i + 1
+
+        received_at = datetime.utcnow()
+        assert ilsm.consume_hello(received_at) == "up"
+        assert ilsm.state == "up"
+        assert ilsm.last_hello_at == received_at
+        assert ilsm.hello_counter == 0
+
     @pytest.mark.parametrize(
         "delta_secs, expected_state", [(0, "up"), (9, "up"), (10, "down")]
     )
