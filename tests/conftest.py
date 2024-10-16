@@ -53,7 +53,9 @@ def intf_three(switch_two):
 @pytest.fixture
 def liveness_manager():
     """LivenessManager fixture."""
-    return LivenessManager(MagicMock())
+    settings = MagicMock()
+    settings.LIVENESS_MIN_HELLOS_UP = 1
+    return LivenessManager(MagicMock(), settings)
 
 
 @pytest.fixture
