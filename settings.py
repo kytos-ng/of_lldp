@@ -9,6 +9,8 @@ TOPOLOGY_URL = 'http://localhost:8181/api/kytos/topology/v3'
 # Link liveness hello interval is the same as POLLING_TIME
 # Link liveness dead interval is POLLING_TIME * LIVENESS_DEAD_MULTIPLIER
 LIVENESS_DEAD_MULTIPLIER = 5
+# Link liveness minimum number of hellos before considering liveness UP
+LIVENESS_MIN_HELLOS_UP = 2
 
 LLDP_LOOP_ACTIONS = ["log"]  # supported actions ["log", "disable"]
 LLDP_IGNORED_LOOPS = {}  # ignored loops per dpid {"dpid": [[1, 2]]}
