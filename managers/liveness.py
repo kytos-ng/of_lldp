@@ -124,6 +124,13 @@ class LivenessManager:
             return EntityStatus.DOWN
         return None
 
+    @classmethod
+    def link_status_reason_hook_liveness(cls, link) -> frozenset[str]:
+        """Link status reason hook liveness."""
+        if cls.link_status_hook_liveness(link) == EntityStatus.DOWN:
+            return frozenset({"liveness"})
+        return frozenset()
+
     def is_enabled(self, *interfaces) -> bool:
         """Check if liveness is enabled on an interface."""
         for interface in interfaces:
