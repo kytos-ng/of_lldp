@@ -188,6 +188,19 @@ class TestLivenessManager:
         status = liveness_manager.link_status_hook_liveness(mock_link)
         assert status is None
 
+    def test_link_status_reason_hook_liveness(self, liveness_manager) -> None:
+        """Test link_status_reason_hook_liveness."""
+        mock_link = MagicMock()
+        mock_link.is_active.return_value = True
+        mock_link.is_enabled.return_value = True
+        mock_link.metadata = {"liveness_status": "down"}
+        status = liveness_manager.link_status_reason_hook_liveness(mock_link)
+        assert status == frozenset({"liveness"})
+
+        mock_link.metadata = {"liveness_status": "up"}
+        status = liveness_manager.link_status_reason_hook_liveness(mock_link)
+        assert status == frozenset()
+
     def test_try_to_publish_lsm_event(
         self, liveness_manager, intf_one, intf_two
     ) -> None:
