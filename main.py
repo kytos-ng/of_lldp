@@ -47,6 +47,9 @@ class Main(KytosNApp):
         self.liveness_manager = LivenessManager(self.controller)
         Link.register_status_func(f"{self.napp_id}_liveness",
                                   LivenessManager.link_status_hook_liveness)
+        status_reason_func = LivenessManager.link_status_reason_hook_liveness
+        Link.register_status_reason_func(f"{self.napp_id}_liveness",
+                                         status_reason_func)
         self.table_group = {"base": 0}
 
     @staticmethod
