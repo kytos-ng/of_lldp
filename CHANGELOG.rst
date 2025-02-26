@@ -13,6 +13,7 @@ Added
 Fixed
 =====
 - Registered ``status_reason`` hook for link liveness
+- DB controller now retries for ``ExecutionTimeout`` and ``ConnectionFailure`` instead of just ``AutoReconnect``
 
 [2024.1.0] - 2024-07-23
 ***********************
