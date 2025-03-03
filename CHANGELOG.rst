@@ -6,6 +6,13 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+[2024.1.1] - 2025-03-03
+***********************
+
+Fixed
+=====
+- DB controller now retries for ``ExecutionTimeout`` and ``ConnectionFailure`` instead of just ``AutoReconnect``
+
 [2024.1.0] - 2024-07-23
 ***********************
 
