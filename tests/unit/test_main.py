@@ -14,8 +14,6 @@ from tenacity import RetryError
 
 from tests.helpers import get_topology_mock
 
-# pylint: import-outside-toplevel
-
 
 @patch('kytos.core.controller.Controller.get_switch_by_dpid')
 @patch('napps.kytos.of_lldp.main.Main._unpack_non_empty')

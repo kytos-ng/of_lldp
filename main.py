@@ -1,9 +1,9 @@
 """NApp responsible to discover new switches and hosts."""
 import struct
+from threading import Lock
 
 import httpx
 import tenacity
-from threading import Lock
 from napps.kytos.of_core.msg_prios import of_msg_prio
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.managers import LivenessManager, LoopManager
@@ -231,7 +231,7 @@ class Main(KytosNApp):
             if intf.id in self.liveness_manager.interfaces:
                 found_intfs.append(intf)
         if found_intfs:
-            intf_ids = [intf.id for id in found_intfs]
+            intf_ids = [intf.id for intf in found_intfs]
             log.info(
                 f"Disabling liveness on {switch} with interfaces "
                 f" deleted {intf_ids} "

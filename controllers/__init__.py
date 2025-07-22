@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import pymongo
 from pymongo.errors import ConnectionFailure, ExecutionTimeout
-from pymongo.operations import UpdateOne, DeleteOne
+from pymongo.operations import DeleteOne, UpdateOne
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_random
 
 from kytos.core import log
