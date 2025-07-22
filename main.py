@@ -583,8 +583,9 @@ class Main(KytosNApp):
         if changed_interfaces:
             self.notify_lldp_change('disabled', changed_interfaces)
             intf_ids = [intf.id for intf in intfs]
-            self.liveness_controller.disable_interfaces(intf_ids)
-            self.liveness_manager.disable(*intfs)
+            with self._liveness_ops_lock:
+                self.liveness_controller.disable_interfaces(intf_ids)
+                self.liveness_manager.disable(*intfs)
             self.publish_liveness_status("disabled", intfs)
         if not error_list:
             return JSONResponse(
