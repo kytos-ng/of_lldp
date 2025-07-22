@@ -215,6 +215,40 @@ class Main(KytosNApp):
         await self.loop_manager.handle_topology_loaded(topology)
         self.load_liveness()
 
+    @listen_to("kytos/topology.switch.deleted")
+    def handle_switch_deleted(self, event: KytosEvent) -> None:
+        """Handle on switch deleted."""
+        self.on_switch_deleted(event)
+
+    def on_switch_deleted(self, event: KytosEvent) -> None:
+        """Handle on switch deleted."""
+        switch = event.content["switch"]
+        found_intfs = []
+        for intf in list(switch.interfaces.values()):
+            if intf.id in self.liveness_manager.interfaces:
+                found_intfs.append(intf)
+        if found_intfs:
+            intf_ids = [intf.id for id in found_intfs]
+            log.info(
+                f"Disabling liveness on {switch} with interfaces "
+                f" deleted {intf_ids} "
+            )
+            self.liveness_manager.disable(*found_intfs)
+            self.liveness_controller.disable_interfaces(intf_ids)
+
+    @listen_to("kytos/topology.interface.deleted")
+    def handle_interface_deleted(self, event: KytosEvent) -> None:
+        """Handle on interface deleted."""
+        self.on_switch_deleted(event)
+
+    def on_interface_deleted(self, event: KytosEvent) -> None:
+        """Handle on interface deleted."""
+        intf = event.content["interface"]
+        if intf.id in self.liveness_manager.interfaces:
+            log.info(f"Disabling liveness on {intf} deleted")
+            self.liveness_manager.disable(intf)
+            self.liveness_controller.delete_interface(intf.id)
+
     @alisten_to("kytos/topology.switches.metadata.(added|removed)")
     async def on_switches_metadata_changed(self, event):
         """Handle on switches metadata changed."""
