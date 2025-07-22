@@ -17,6 +17,10 @@ Added
 =====
 - Subscribed and handled kytos/topoogy.interface|switch.deleted
 
+General Information
+===================
+- Script ``scripts/db/2025.1.1/000_liveness_deleted.py`` has been added to list and delete old non existent interfaces which had liveness enabled
+
 [2025.1.0] - 2025-04-14
 ***********************
 
