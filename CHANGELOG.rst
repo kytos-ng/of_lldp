@@ -6,6 +6,17 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+[2025.1.1] - 2025-07-22
+***********************
+
+Fixed
+=====
+- Fixed load liveness to only load found interfaces
+
+Added
+=====
+- Subscribed and handled kytos/topoogy.interface|switch.deleted
+
 [2025.1.0] - 2025-04-14
 ***********************
 
