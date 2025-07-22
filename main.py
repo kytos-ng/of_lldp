@@ -3,6 +3,7 @@ import struct
 
 import httpx
 import tenacity
+from threading import Lock
 from napps.kytos.of_core.msg_prios import of_msg_prio
 from napps.kytos.of_lldp import constants, settings
 from napps.kytos.of_lldp.managers import LivenessManager, LoopManager
@@ -45,6 +46,7 @@ class Main(KytosNApp):
         self.liveness_controller = self.get_liveness_controller()
         self.liveness_controller.bootstrap_indexes()
         self.liveness_manager = LivenessManager(self.controller)
+        self._liveness_ops_lock = Lock()
         Link.register_status_func(f"{self.napp_id}_liveness",
                                   LivenessManager.link_status_hook_liveness)
         status_reason_func = LivenessManager.link_status_reason_hook_liveness
@@ -218,7 +220,8 @@ class Main(KytosNApp):
     @listen_to("kytos/topology.switch.deleted")
     def handle_switch_deleted(self, event: KytosEvent) -> None:
         """Handle on switch deleted."""
-        self.on_switch_deleted(event)
+        with self._liveness_ops_lock:
+            self.on_switch_deleted(event)
 
     def on_switch_deleted(self, event: KytosEvent) -> None:
         """Handle on switch deleted."""
@@ -234,12 +237,13 @@ class Main(KytosNApp):
                 f" deleted {intf_ids} "
             )
             self.liveness_manager.disable(*found_intfs)
-            self.liveness_controller.disable_interfaces(intf_ids)
+            self.liveness_controller.delete_interfaces(intf_ids)
 
     @listen_to("kytos/topology.interface.deleted")
     def handle_interface_deleted(self, event: KytosEvent) -> None:
         """Handle on interface deleted."""
-        self.on_switch_deleted(event)
+        with self._liveness_ops_lock:
+            self.on_interface_deleted(event)
 
     def on_interface_deleted(self, event: KytosEvent) -> None:
         """Handle on interface deleted."""
@@ -634,9 +638,10 @@ class Main(KytosNApp):
         if non_lldp:
             msg = f"Interface IDs {non_lldp} don't have LLDP enabled"
             raise HTTPException(400, msg)
-        self.liveness_controller.enable_interfaces(intf_ids)
-        self.liveness_manager.enable(*intfs)
-        self.publish_liveness_status("enabled", intfs)
+        with self._liveness_ops_lock:
+            self.liveness_controller.enable_interfaces(intf_ids)
+            self.liveness_manager.enable(*intfs)
+            self.publish_liveness_status("enabled", intfs)
         return JSONResponse({})
 
     @rest("v1/liveness/disable", methods=["POST"])
@@ -652,9 +657,10 @@ class Main(KytosNApp):
             raise HTTPException(404, f"Interface IDs {diff} not found")
 
         intfs = [interfaces[_id] for _id in intf_ids if _id in interfaces]
-        self.liveness_controller.disable_interfaces(intf_ids)
-        self.liveness_manager.disable(*intfs)
-        self.publish_liveness_status("disabled", intfs)
+        with self._liveness_ops_lock:
+            self.liveness_controller.disable_interfaces(intf_ids)
+            self.liveness_manager.disable(*intfs)
+            self.publish_liveness_status("disabled", intfs)
         return JSONResponse({})
 
     @rest("v1/liveness/", methods=["GET"])
