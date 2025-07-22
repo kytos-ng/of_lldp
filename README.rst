@@ -103,6 +103,8 @@ Subscribed
 - ``kytos/topology.topology_loaded``
 - ``kytos/topology.switches.metadata.(added|removed)``
 - ``kytos/of_multi_table.enable_table``
+- ``kytos/topology.switch.deleted``
+- ``kytos/topology.interface.deleted``
 
 Published
 ---------
