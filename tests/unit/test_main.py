@@ -363,6 +363,18 @@ class TestMain:
         self.napp.load_liveness()
         count = self.napp.liveness_controller.get_enabled_interfaces.call_count
         assert count == 1
+        assert not self.napp.liveness_manager.interfaces
+
+    def test_load_liveness_enabled(self) -> None:
+        """Test load_liveness enabled."""
+        mocked = MagicMock()
+        intf_id = "00:00:00:00:00:00:00:01:1"
+        mocked.return_value = [{"id": intf_id}]
+        self.napp.liveness_controller.get_enabled_interfaces = mocked
+        self.napp.load_liveness()
+        count = self.napp.liveness_controller.get_enabled_interfaces.call_count
+        assert count == 1
+        assert intf_id in self.napp.liveness_manager.interfaces
 
     async def test_on_topology_loaded(self) -> None:
         """Test on_topology_loaded."""
