@@ -138,9 +138,15 @@ class Main(KytosNApp):
 
     def load_liveness(self) -> None:
         """Load liveness."""
-        interfaces = {intf.id: intf for intf in self._get_interfaces()}
-        intfs = self.liveness_controller.get_enabled_interfaces()
-        intfs_to_enable = [interfaces[intf["id"]] for intf in intfs]
+        enabled_intf_ids = {
+            intf["id"]
+            for intf in self.liveness_controller.get_enabled_interfaces()
+        }
+        intfs_to_enable = [
+            intf
+            for intf in self._get_interfaces()
+            if intf.id in enabled_intf_ids
+        ]
         self.liveness_manager.enable(*intfs_to_enable)
 
     def try_to_publish_stopped_loops(self):
