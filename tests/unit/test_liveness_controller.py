@@ -65,8 +65,9 @@ class TestLivenessController:  # pylint: disable=too-many-public-methods
         """Test delete_interfaces."""
         intf_ids = ["00:00:00:00:00:00:00:01:2", "00:00:00:00:00:00:00:02:2"]
         liveness_controller.delete_interfaces(intf_ids)
-        mock = liveness_controller.db.liveness.bulk_write
+        mock = liveness_controller.db.liveness.delete_many
         assert mock.call_count == 1
+        mock.assert_called_with({"_id": {"$in": intf_ids}})
 
     def test_delete_interface(self, liveness_controller) -> None:
         """Test delete_interface."""
