@@ -115,9 +115,6 @@ class LivenessController:
         """Hard delete liveness interfaces."""
         if not interface_ids:
             return 0
-        ops = [
-            DeleteOne({"_id": interface_id})
-            for interface_id in interface_ids
-        ]
-        response = self.db.liveness.bulk_write(ops)
-        return response.deleted_count
+        return self.db.liveness.delete_many(
+            {"_id": {"$in": interface_ids}}
+        ).deleted_count
