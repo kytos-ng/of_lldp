@@ -60,3 +60,19 @@ class TestLivenessController:  # pylint: disable=too-many-public-methods
             [{"enabled": False}, {"enabled": False}],
             upsert=False,
         )
+
+    def test_delete_interfaces(self, liveness_controller) -> None:
+        """Test delete_interfaces."""
+        intf_ids = ["00:00:00:00:00:00:00:01:2", "00:00:00:00:00:00:00:02:2"]
+        liveness_controller.delete_interfaces(intf_ids)
+        mock = liveness_controller.db.liveness.delete_many
+        assert mock.call_count == 1
+        mock.assert_called_with({"_id": {"$in": intf_ids}})
+
+    def test_delete_interface(self, liveness_controller) -> None:
+        """Test delete_interface."""
+        intf_id = "00:00:00:00:00:00:00:01:1"
+        liveness_controller.delete_interface(intf_id)
+        mock = liveness_controller.db.liveness.find_one_and_delete
+        assert mock.call_count == 1
+        mock.assert_called_with({"_id": intf_id})

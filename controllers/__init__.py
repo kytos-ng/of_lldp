@@ -3,7 +3,7 @@
 # pylint: disable=invalid-name
 import os
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 import pymongo
 from pymongo.errors import ConnectionFailure, ExecutionTimeout
@@ -106,3 +106,15 @@ class LivenessController:
             [{"enabled": False} for _ in interface_ids],
             upsert=False,
         )
+
+    def delete_interface(self, interface_id: str) -> Optional[dict]:
+        """Hard delete one interface."""
+        return self.db.liveness.find_one_and_delete({"_id": interface_id})
+
+    def delete_interfaces(self, interface_ids: List[str]) -> int:
+        """Hard delete liveness interfaces."""
+        if not interface_ids:
+            return 0
+        return self.db.liveness.delete_many(
+            {"_id": {"$in": interface_ids}}
+        ).deleted_count

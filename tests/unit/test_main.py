@@ -363,6 +363,18 @@ class TestMain:
         self.napp.load_liveness()
         count = self.napp.liveness_controller.get_enabled_interfaces.call_count
         assert count == 1
+        assert not self.napp.liveness_manager.interfaces
+
+    def test_load_liveness_enabled(self) -> None:
+        """Test load_liveness enabled."""
+        mocked = MagicMock()
+        intf_id = "00:00:00:00:00:00:00:01:1"
+        mocked.return_value = [{"id": intf_id}]
+        self.napp.liveness_controller.get_enabled_interfaces = mocked
+        self.napp.load_liveness()
+        count = self.napp.liveness_controller.get_enabled_interfaces.call_count
+        assert count == 1
+        assert intf_id in self.napp.liveness_manager.interfaces
 
     async def test_on_topology_loaded(self) -> None:
         """Test on_topology_loaded."""
@@ -634,3 +646,57 @@ class TestMain:
         assert mock_avaialble.call_count == 1
         assert mock_avaialble.call_args[0][0] == switch
         assert data['flows'] == [{'cookie_mask': "mock_cookie"}]
+
+    def test_on_interface_deleted(self):
+        """Test on interface deleted"""
+        intf_id = "00:00:00:00:00:00:00:01:1"
+        intf = MagicMock()
+        intf.id = intf_id
+        self.napp.liveness_manager.interfaces[intf_id] = intf
+        content = {"interface": intf}
+        event = KytosEvent(content=content)
+        self.napp.on_interface_deleted(event)
+        assert intf.id not in self.napp.liveness_manager.interfaces
+        assert self.napp.liveness_controller.delete_interface.call_count == 1
+
+    def test_on_interface_deleted_not_loaded(self):
+        """Test on interface deleted not loaded"""
+        intf_id = "00:00:00:00:00:00:00:01:1"
+        intf = MagicMock()
+        intf.id = intf_id
+        self.napp.liveness_manager.interfaces["some_id"] = intf
+        content = {"interface": intf}
+        event = KytosEvent(content=content)
+        self.napp.on_interface_deleted(event)
+        assert "some_id" in self.napp.liveness_manager.interfaces
+        assert intf.id not in self.napp.liveness_manager.interfaces
+        assert not self.napp.liveness_controller.delete_interface.call_count
+
+    def test_on_switch_deleted(self):
+        """Test on switch deleted"""
+        intf_id = "00:00:00:00:00:00:00:01"
+        switch = MagicMock()
+        intf = MagicMock()
+        intf.id = intf_id
+        switch.interfaces = {intf_id: intf}
+        self.napp.liveness_manager.interfaces[intf_id] = intf
+        content = {"switch": switch}
+        event = KytosEvent(content=content)
+        self.napp.on_switch_deleted(event)
+        assert intf.id not in self.napp.liveness_manager.interfaces
+        assert self.napp.liveness_controller.delete_interfaces.call_count == 1
+
+    def test_on_switch_deleted_not_loaded(self):
+        """Test on switch deleted not loaded"""
+        intf_id = "00:00:00:00:00:00:00:01"
+        switch = MagicMock()
+        intf = MagicMock()
+        intf.id = intf_id
+        switch.interfaces = {intf_id: intf}
+        self.napp.liveness_manager.interfaces["some_id"] = intf
+        content = {"switch": switch}
+        event = KytosEvent(content=content)
+        self.napp.on_switch_deleted(event)
+        assert "some_id" in self.napp.liveness_manager.interfaces
+        assert intf.id not in self.napp.liveness_manager.interfaces
+        assert not self.napp.liveness_controller.delete_interfaces.call_count
