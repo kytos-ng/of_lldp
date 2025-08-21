@@ -331,9 +331,11 @@ class Main(KytosNApp):
         for interface_id in switch.interfaces:
             interface = switch.interfaces[interface_id]
             try:
-                with interface.tag_lock:
-                    interface.use_tags("vlan", self.vlan_id)
-                    interface.notify_tag_listeners(self.controller)
+                interface.atomic_use_tags(
+                    self.controller,
+                    "vlan",
+                    self.vlan_id
+                )
             except KytosTagError as err:
                 log.error(err)
 
@@ -344,11 +346,11 @@ class Main(KytosNApp):
         for interface_id in switch.interfaces:
             interface = switch.interfaces[interface_id]
             try:
-                with interface.tag_lock:
-                    conflict = interface.make_tags_available(
-                        "vlan", self.vlan_id
-                    )
-                    interface.notify_tag_listeners(self.controller)
+                conflict = interface.atomic_make_tags_available(
+                    self.controller,
+                    "vlan",
+                    self.vlan_id
+                )
                 if conflict:
                     log.warning(f"Tags {conflict} was already available"
                                 f" in {switch.id}:{interface_id}")
