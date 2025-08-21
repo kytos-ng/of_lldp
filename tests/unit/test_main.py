@@ -557,60 +557,62 @@ class TestMain:
         """Test use_vlan"""
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         interface_a = get_interface_mock("mock_a", 1, switch)
-        interface_a.use_tags = MagicMock()
+        interface_a.atomic_use_tags = MagicMock()
+        a_get_tag = interface_a.atomic_use_tags
         interface_b = get_interface_mock("mock_b", 2, switch)
-        interface_b.use_tags = MagicMock()
+        interface_b.atomic_use_tags = MagicMock()
+        b_get_tag = interface_b.atomic_use_tags
         switch.interfaces = {1: interface_a, 2: interface_b}
         self.napp.use_vlan(switch)
-        assert interface_a.use_tags.call_count == 1
-        assert interface_b.use_tags.call_count == 1
+        assert a_get_tag.call_count == 1
+        assert b_get_tag.call_count == 1
 
-        interface_a.use_tags.side_effect = KytosTagsAreNotAvailable([], "1")
+        a_get_tag.side_effect = KytosTagsAreNotAvailable([], "1")
         self.napp.use_vlan(switch)
-        assert interface_a.use_tags.call_count == 2
-        assert interface_b.use_tags.call_count == 2
+        assert a_get_tag.call_count == 2
+        assert b_get_tag.call_count == 2
         assert mock_log.error.call_count == 1
 
         self.napp.vlan_id = None
         self.napp.use_vlan(switch)
-        assert interface_a.use_tags.call_count == 2
-        assert interface_b.use_tags.call_count == 2
+        assert a_get_tag.call_count == 2
+        assert b_get_tag.call_count == 2
 
     @patch('napps.kytos.of_lldp.main.log')
     def test_make_vlan_available(self, mock_log):
         """Test make_vlan_available"""
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
         interface_a = get_interface_mock("mock_a", 1, switch)
-        interface_a.make_tags_available = MagicMock()
-        a_make_ava = interface_a.make_tags_available
+        interface_a.atomic_make_tags_available = MagicMock()
+        a_make_ava = interface_a.atomic_make_tags_available
         a_make_ava.return_value = []
         interface_b = get_interface_mock("mock_b", 2, switch)
-        interface_b.make_tags_available = MagicMock()
-        b_make_ava = interface_b.make_tags_available
+        interface_b.atomic_make_tags_available = MagicMock()
+        b_make_ava = interface_b.atomic_make_tags_available
         b_make_ava.return_value = []
         switch.interfaces = {1: interface_a, 2: interface_b}
         self.napp.make_vlan_available(switch)
-        assert interface_a.make_tags_available.call_count == 1
-        assert interface_b.make_tags_available.call_count == 1
+        assert a_make_ava.call_count == 1
+        assert b_make_ava.call_count == 1
 
         a_make_ava.return_value = [[3799, 3799]]
         self.napp.make_vlan_available(switch)
-        assert interface_a.make_tags_available.call_count == 2
-        assert interface_b.make_tags_available.call_count == 2
+        assert a_make_ava.call_count == 2
+        assert b_make_ava.call_count == 2
         assert mock_log.warning.call_count == 1
 
         self.napp.vlan_id = None
         self.napp.make_vlan_available(switch)
-        assert interface_a.make_tags_available.call_count == 2
-        assert interface_b.make_tags_available.call_count == 2
+        assert a_make_ava.call_count == 2
+        assert b_make_ava.call_count == 2
 
         self.napp.vlan_id = 3799
         b_make_ava.side_effect = KytosTagsNotInTagRanges(
             [[3799, 3799]], "01:2"
         )
         self.napp.make_vlan_available(switch)
-        assert interface_a.make_tags_available.call_count == 3
-        assert interface_b.make_tags_available.call_count == 3
+        assert a_make_ava.call_count == 3
+        assert b_make_ava.call_count == 3
         assert mock_log.error.call_count == 1
 
     @patch('napps.kytos.of_lldp.main.Main.use_vlan')
