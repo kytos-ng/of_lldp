@@ -608,6 +608,7 @@ class Main(KytosNApp):
         interfaces = self._get_interfaces_dict(interfaces)
         for id_ in interface_ids:
             interface = interfaces.get(id_)
+            log.error(f"{vars(interface)}wowza")
             if interface:
                 interface.lldp = True
                 changed_interfaces.append(id_)
@@ -712,6 +713,7 @@ class Main(KytosNApp):
                     "status": lsm.ilsm_b.state,
                     "last_hello_at": lsm.ilsm_b.last_hello_at,
                 },
+                "link_id": entry["interface_a"].link.id,
                 "status": lsm.state
             }
             pairs.append(pair)
