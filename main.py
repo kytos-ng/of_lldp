@@ -608,7 +608,6 @@ class Main(KytosNApp):
         interfaces = self._get_interfaces_dict(interfaces)
         for id_ in interface_ids:
             interface = interfaces.get(id_)
-            log.error(f"{vars(interface)}wowza")
             if interface:
                 interface.lldp = True
                 changed_interfaces.append(id_)
