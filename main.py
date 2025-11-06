@@ -712,7 +712,7 @@ class Main(KytosNApp):
                     "status": lsm.ilsm_b.state,
                     "last_hello_at": lsm.ilsm_b.last_hello_at,
                 },
-                "link_id": entry["interface_a"].link.id,
+                "link_id": entry["interface_a"].link.id if entry["interface_a"].link else None,
                 "status": lsm.state
             }
             pairs.append(pair)
