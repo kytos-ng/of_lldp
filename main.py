@@ -701,6 +701,7 @@ class Main(KytosNApp):
         pairs = []
         for entry in list(self.liveness_manager.liveness.values()):
             lsm = entry["lsm"]
+            link = entry["interface_a"].link
             pair = {
                 "interface_a": {
                     "id": entry["interface_a"].id,
@@ -712,7 +713,7 @@ class Main(KytosNApp):
                     "status": lsm.ilsm_b.state,
                     "last_hello_at": lsm.ilsm_b.last_hello_at,
                 },
-                "link_id": entry["interface_a"].link.id if entry["interface_a"].link else None,
+                "link_id": link.id if link else None,
                 "status": lsm.state
             }
             pairs.append(pair)
