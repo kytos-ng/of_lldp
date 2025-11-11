@@ -13,6 +13,7 @@ Fixed
 Added
 =====
 - Subscribed and handled kytos/topoogy.interface|switch.deleted
+- Endpoint ``Get liveness/pair`` now returns the ID of the link between the two interfaces
 
 General Information
 ===================
