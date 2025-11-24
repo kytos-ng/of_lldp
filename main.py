@@ -578,21 +578,21 @@ class Main(KytosNApp):
         if not interfaces:
             raise HTTPException(404, detail="No interfaces were found.")
         interfaces = self._get_interfaces_dict(interfaces)
-        for id_ in interface_ids:
-            interface = interfaces.get(id_)
-            if interface:
-                interface.lldp = False
-                changed_interfaces.append(id_)
-                intfs.append(interface)
-            else:
-                error_list.append(id_)
-        if changed_interfaces:
-            self.notify_lldp_change('disabled', changed_interfaces)
-            intf_ids = [intf.id for intf in intfs]
-            with self._liveness_ops_lock:
+        with self._liveness_ops_lock:
+            for id_ in interface_ids:
+                interface = interfaces.get(id_)
+                if interface:
+                    interface.lldp = False
+                    changed_interfaces.append(id_)
+                    intfs.append(interface)
+                else:
+                    error_list.append(id_)
+            if changed_interfaces:
+                self.notify_lldp_change('disabled', changed_interfaces)
+                intf_ids = [intf.id for intf in intfs]
                 self.liveness_controller.disable_interfaces(intf_ids)
                 self.liveness_manager.disable(*intfs)
-            self.publish_liveness_status("disabled", intfs)
+                self.publish_liveness_status("disabled", intfs)
         if not error_list:
             return JSONResponse(
                 "All the requested interfaces have been disabled.")
@@ -612,15 +612,16 @@ class Main(KytosNApp):
         if not interfaces:
             raise HTTPException(404, detail="No interfaces were found.")
         interfaces = self._get_interfaces_dict(interfaces)
-        for id_ in interface_ids:
-            interface = interfaces.get(id_)
-            if interface:
-                interface.lldp = True
-                changed_interfaces.append(id_)
-            else:
-                error_list.append(id_)
-        if changed_interfaces:
-            self.notify_lldp_change('enabled', changed_interfaces)
+        with self._liveness_ops_lock:
+            for id_ in interface_ids:
+                interface = interfaces.get(id_)
+                if interface:
+                    interface.lldp = True
+                    changed_interfaces.append(id_)
+                else:
+                    error_list.append(id_)
+            if changed_interfaces:
+                self.notify_lldp_change('enabled', changed_interfaces)
         if not error_list:
             return JSONResponse(
                 "All the requested interfaces have been enabled.")
@@ -641,11 +642,11 @@ class Main(KytosNApp):
             raise HTTPException(404, f"Interface IDs {diff} not found")
 
         intfs = [interfaces[_id] for _id in intf_ids]
-        non_lldp = [intf.id for intf in intfs if not intf.lldp]
-        if non_lldp:
-            msg = f"Interface IDs {non_lldp} don't have LLDP enabled"
-            raise HTTPException(400, msg)
         with self._liveness_ops_lock:
+            non_lldp = [intf.id for intf in intfs if not intf.lldp]
+            if non_lldp:
+                msg = f"Interface IDs {non_lldp} don't have LLDP enabled"
+                raise HTTPException(400, msg)
             self.liveness_controller.enable_interfaces(intf_ids)
             self.liveness_manager.enable(*intfs)
             self.publish_liveness_status("enabled", intfs)
