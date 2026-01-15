@@ -6,6 +6,10 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+Changed
+=======
+- Modified to use ``TAGCapable`` for acquiring and releasing tags.
+
 Fixed
 =====
 - Fixed load liveness to only load found interfaces
