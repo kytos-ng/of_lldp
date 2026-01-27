@@ -226,6 +226,8 @@ components:
         interface_b:
           type: object
           $ref: '#/components/schemas/LivenessInterface'
+        link_id:
+          type: string
         status:
           type: string
     LivenessInterfacesPairs:
