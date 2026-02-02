@@ -6,6 +6,9 @@ All notable changes to the of_lldp NApp will be documented in this file.
 [UNRELEASED] - Under development
 ********************************
 
+[2025.2.0] - 2026-02-02
+***********************
+
 Fixed
 =====
 - Fixed load liveness to only load found interfaces
