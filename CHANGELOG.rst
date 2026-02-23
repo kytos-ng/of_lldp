@@ -10,6 +10,9 @@ Changed
 =======
 - Modified to use ``TAGCapable`` for acquiring and releasing tags.
 
+[2025.2.0] - 2026-02-02
+***********************
+
 Fixed
 =====
 - Fixed load liveness to only load found interfaces
