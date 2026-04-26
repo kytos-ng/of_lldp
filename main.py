@@ -332,7 +332,6 @@ class Main(KytosNApp):
             interface = switch.interfaces[interface_id]
             try:
                 interface.atomic_use_tags(
-                    self.controller,
                     "vlan",
                     self.vlan_id
                 )
@@ -347,7 +346,6 @@ class Main(KytosNApp):
             interface = switch.interfaces[interface_id]
             try:
                 conflict = interface.atomic_make_tags_available(
-                    self.controller,
                     "vlan",
                     self.vlan_id
                 )
