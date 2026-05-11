@@ -19,7 +19,8 @@ from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_combine, wait_fixed, wait_random)
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
-from kytos.core.exceptions import KytosTagError
+from kytos.core.interface import Interface
+from kytos.core.exceptions import KytosTagError, KytosNoTagAvailableError
 from kytos.core.helpers import alisten_to, listen_to
 from kytos.core.link import Link
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
@@ -166,13 +167,17 @@ class Main(KytosNApp):
                 log.error("try_to_publish_stopped_loops failed with switch:"
                           f"{dpid}, port_pair: {port_pair}. {str(exc)}")
 
-    @listen_to('kytos/topology.switch.(enabled|disabled)')
+    @listen_to(
+        'kytos/topology.switch.disabled',
+        'kytos/of_core.switch.interfaces.created',
+        'kytos/of_core.switch.interface.created',
+    )
     def handle_lldp_flows(self, event):
         """Install or remove flows in a switch.
 
         Install a flow to send LLDP packets to the controller. The proactive
-        flow is installed whenever a switch is enabled. If the switch is
-        disabled the flow is removed.
+        flow is installed whenever interfaces.created is received.
+        If the switch is disabled the flow is removed.
 
         Args:
             event (:class:`~kytos.core.events.KytosEvent`):
@@ -263,12 +268,25 @@ class Main(KytosNApp):
         """Install or remove flows in a switch.
 
         Install a flow to send LLDP packets to the controller. The proactive
-        flow is installed whenever a switch is enabled. If the switch is
-        disabled the flow is removed.
+        flow is installed whenever a switch interfaces.created is received.
+        If the switch is disabled the flow is removed.
         """
         try:
             dpid = event.content['dpid']
             switch = self.controller.get_switch_by_dpid(dpid)
+            if not switch:
+                log.error(
+                    f"dpid {dpid} not found when handling lldp flows, "
+                    f"event: {event}, content: {event.content}"
+                )
+                return
+        except KeyError:
+            if event.name == "kytos/of_core.switch.interface.created":
+                self.use_vlan(event.content['interface'])
+                return
+            raise
+
+        try:
             of_version = switch.connection.protocol.version
         except AttributeError:
             of_version = None
@@ -285,8 +303,8 @@ class Main(KytosNApp):
             return
 
         flow = None
-        if ("switch.enabled" in event.name and not installed_flows or
-                "switch.disabled" in event.name and installed_flows):
+        if ((event.name.endswith("interfaces.created") and not installed_flows)
+                or ("switch.disabled" in event.name and installed_flows)):
             flow = self._build_lldp_flow(of_version, get_cookie(switch.dpid))
 
         if flow:
@@ -310,13 +328,13 @@ class Main(KytosNApp):
         """Send flows to flow_manager to be installed/deleted"""
         endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{switch.id}'
         client_error = {424, 404, 400}
-        if event_name == 'kytos/topology.switch.enabled':
+        if event_name == 'kytos/of_core.switch.interfaces.created':
             for flow in data['flows']:
                 flow.pop("cookie_mask", None)
             res = httpx.post(endpoint, json=data, timeout=10)
             if res.is_server_error or res.status_code in client_error:
                 raise httpx.RequestError(res.text)
-            self.use_vlan(switch)
+            self.use_vlan(*[intf for intf in switch.interfaces.values()])
 
         elif event_name == 'kytos/topology.switch.disabled':
             res = httpx.request("DELETE", endpoint, json=data, timeout=10)
@@ -324,14 +342,22 @@ class Main(KytosNApp):
                 raise httpx.RequestError(res.text)
             self.make_vlan_available(switch)
 
-    def use_vlan(self, switch: Switch) -> None:
+    def use_vlan(self, *interfaces: Interface) -> None:
         """Use vlan from interface"""
         if self.vlan_id is None:
             return
-        for interface_id in switch.interfaces:
-            interface = switch.interfaces[interface_id]
+        for interface in interfaces:
             try:
                 interface.use_tags(self.controller, self.vlan_id)
+            except KytosNoTagAvailableError:
+                """
+                Eventually, when of_lldp flow is based per interface
+                we should better handle this error, for now it's simpler
+                to maintain to just try to use and ignore if used
+
+                Dependency: https://github.com/kytos-ng/of_lldp/issues/46
+                """
+                pass
             except KytosTagError as err:
                 log.error(err)
 
