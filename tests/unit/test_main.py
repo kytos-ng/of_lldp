@@ -1,7 +1,8 @@
 """Test Main methods."""
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, call, patch
+
+import pytest
 
 from httpx import Response
 from kytos.core.events import KytosEvent

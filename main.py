@@ -19,9 +19,9 @@ from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_combine, wait_fixed, wait_random)
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
-from kytos.core.interface import Interface
-from kytos.core.exceptions import KytosTagError, KytosNoTagAvailableError
+from kytos.core.exceptions import KytosNoTagAvailableError, KytosTagError
 from kytos.core.helpers import alisten_to, listen_to
+from kytos.core.interface import Interface
 from kytos.core.link import Link
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
                                  aget_json_or_400, get_json_or_400)
@@ -334,7 +334,7 @@ class Main(KytosNApp):
             res = httpx.post(endpoint, json=data, timeout=10)
             if res.is_server_error or res.status_code in client_error:
                 raise httpx.RequestError(res.text)
-            self.use_vlan(*[intf for intf in switch.interfaces.values()])
+            self.use_vlan(*list(switch.interfaces.values()))
 
         elif event_name == 'kytos/topology.switch.disabled':
             res = httpx.request("DELETE", endpoint, json=data, timeout=10)
@@ -343,20 +343,19 @@ class Main(KytosNApp):
             self.make_vlan_available(switch)
 
     def use_vlan(self, *interfaces: Interface) -> None:
-        """Use vlan from interface"""
+        """Use vlan from interface
+
+        Eventually, when of_lldp flow is based per interface
+        we should better handle KytosNoTagAvailableError, for now it's simpler
+        to maintain to just try to use and ignore if used
+        Dependency: https://github.com/kytos-ng/of_lldp/issues/46
+        """
         if self.vlan_id is None:
             return
         for interface in interfaces:
             try:
                 interface.use_tags(self.controller, self.vlan_id)
             except KytosNoTagAvailableError:
-                """
-                Eventually, when of_lldp flow is based per interface
-                we should better handle this error, for now it's simpler
-                to maintain to just try to use and ignore if used
-
-                Dependency: https://github.com/kytos-ng/of_lldp/issues/46
-                """
                 pass
             except KytosTagError as err:
                 log.error(err)
