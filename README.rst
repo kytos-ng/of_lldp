@@ -97,7 +97,9 @@ Events
 Subscribed
 ----------
 
+- ``.*.connection.lost``
 - ``kytos/of_core.v0x04.messages.in.ofpt_packet_in``
+- ``kytos/topology.switch.enabled``
 - ``kytos/topology.switch.disabled``
 - ``kytos/of_core.switch.interfaces.created``
 - ``kytos/of_core.switch.interface.created``
