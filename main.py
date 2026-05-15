@@ -328,7 +328,7 @@ class Main(KytosNApp):
                 self._rcvd_intfs_created[dpid] = event.timestamp
             elif event.name == 'kytos/topology.switch.enabled':
                 if dpid not in self._rcvd_intfs_created:
-                    log.info(
+                    log.debug(
                         f"switch.enabled for {dpid}: deferring LLDP flow "
                         "install until interfaces.created"
                     )
@@ -352,7 +352,7 @@ class Main(KytosNApp):
 
             flow = None
             if ((event.name in self._install_event_names
-                    and not installed_flows)
+                    and not installed_flows and switch.is_enabled())
                     or ("switch.disabled" in event.name and installed_flows)):
                 flow = self._build_lldp_flow(of_version,
                                              get_cookie(switch.dpid))
