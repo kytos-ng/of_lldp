@@ -324,46 +324,46 @@ class Main(KytosNApp):
                 return
             self._flows_ev_updated_at[dpid] = event.timestamp
 
-        if event.name == 'kytos/of_core.switch.interfaces.created':
-            self._rcvd_intfs_created[dpid] = event.timestamp
-        elif event.name == 'kytos/topology.switch.enabled':
-            if dpid not in self._rcvd_intfs_created:
-                log.info(
-                    f"switch.enabled for {dpid}: deferring LLDP flow "
-                    "install until interfaces.created"
-                )
+            if event.name == 'kytos/of_core.switch.interfaces.created':
+                self._rcvd_intfs_created[dpid] = event.timestamp
+            elif event.name == 'kytos/topology.switch.enabled':
+                if dpid not in self._rcvd_intfs_created:
+                    log.info(
+                        f"switch.enabled for {dpid}: deferring LLDP flow "
+                        "install until interfaces.created"
+                    )
+                    return
+
+            try:
+                of_version = switch.connection.protocol.version
+            except AttributeError:
+                of_version = None
+
+            try:
+                installed_flows = self.get_flows_by_switch(switch.id)
+            except tenacity.RetryError as err:
+                msg = f"Error: {err.last_attempt.exception()} when "\
+                       "obtaining flows."
+                log.error(msg)
+                return
+            except ValueError as err:
+                log.error(f"Error when getting flows, error: {err}")
                 return
 
-        try:
-            of_version = switch.connection.protocol.version
-        except AttributeError:
-            of_version = None
+            flow = None
+            if ((event.name in self._install_event_names and not installed_flows)
+                    or ("switch.disabled" in event.name and installed_flows)):
+                flow = self._build_lldp_flow(of_version,
+                                             get_cookie(switch.dpid))
 
-        try:
-            installed_flows = self.get_flows_by_switch(switch.id)
-        except tenacity.RetryError as err:
-            msg = f"Error: {err.last_attempt.exception()} when "\
-                   "obtaining flows."
-            log.error(msg)
-            return
-        except ValueError as err:
-            log.error(f"Error when getting flows, error: {err}")
-            return
-
-        flow = None
-        if ((event.name in self._install_event_names and not installed_flows)
-                or ("switch.disabled" in event.name and installed_flows)):
-            flow = self._build_lldp_flow(of_version,
-                                         get_cookie(switch.dpid))
-
-        if flow:
-            data = {'flows': [flow]}
-            try:
-                self.send_flow(switch, event.name, data=data)
-            except tenacity.RetryError as err:
-                msg = f"Error: {err.last_attempt.exception()} when"\
-                      f" sending flows to {switch.id}, {data}"
-                log.error(msg)
+            if flow:
+                data = {'flows': [flow]}
+                try:
+                    self.send_flow(switch, event.name, data=data)
+                except tenacity.RetryError as err:
+                    msg = f"Error: {err.last_attempt.exception()} when"\
+                          f" sending flows to {switch.id}, {data}"
+                    log.error(msg)
 
     # pylint: disable=unexpected-keyword-arg
     @retry(
