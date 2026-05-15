@@ -8,7 +8,11 @@ All notable changes to the of_lldp NApp will be documented in this file.
 
 Changed
 =======
-- Replaced ``kytos/topology.switch.enabled`` with ``kytos/of_core.switch.interface(s).created`` subscription, to be more reliable when handling the of_lldp flow and respective vlan usage
+- Subscribed to ``kytos/of_core.switch.interface(s).created`` to be more reliable when handling the of_lldp flow and respective vlan usage
+
+Fixed
+=====
+- Fixed potential out of order switch events when managing of_lldp flow
 
 
 [2025.2.0] - 2026-02-02
