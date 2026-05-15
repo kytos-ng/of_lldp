@@ -351,7 +351,8 @@ class Main(KytosNApp):
                 return
 
             flow = None
-            if ((event.name in self._install_event_names and not installed_flows)
+            if ((event.name in self._install_event_names
+                    and not installed_flows)
                     or ("switch.disabled" in event.name and installed_flows)):
                 flow = self._build_lldp_flow(of_version,
                                              get_cookie(switch.dpid))
