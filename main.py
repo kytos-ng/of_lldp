@@ -1,5 +1,7 @@
 """NApp responsible to discover new switches and hosts."""
 import struct
+from collections import defaultdict
+from datetime import datetime
 from threading import Lock
 
 import httpx
@@ -48,6 +50,13 @@ class Main(KytosNApp):
         self.liveness_controller.bootstrap_indexes()
         self.liveness_manager = LivenessManager(self.controller)
         self._liveness_ops_lock = Lock()
+        self._rcvd_intfs_created: dict[str, datetime] = {}
+        self._flows_ev_updated_at = {}
+        self._dpid_locks: defaultdict[str, Lock] = defaultdict(Lock)
+        self._install_event_names = {
+            "kytos/of_core.switch.interfaces.created",
+            "kytos/topology.switch.enabled",
+        }
         Link.register_status_func(f"{self.napp_id}_liveness",
                                   LivenessManager.link_status_hook_liveness)
         status_reason_func = LivenessManager.link_status_reason_hook_liveness
@@ -168,6 +177,7 @@ class Main(KytosNApp):
                           f"{dpid}, port_pair: {port_pair}. {str(exc)}")
 
     @listen_to(
+        'kytos/topology.switch.enabled',
         'kytos/topology.switch.disabled',
         'kytos/of_core.switch.interfaces.created',
         'kytos/of_core.switch.interface.created',
@@ -176,8 +186,9 @@ class Main(KytosNApp):
         """Install or remove flows in a switch.
 
         Install a flow to send LLDP packets to the controller. The proactive
-        flow is installed whenever interfaces.created is received.
-        If the switch is disabled the flow is removed.
+        flow is installed on interfaces.created or on switch.enabled (when
+        interfaces.created has already fired). If the switch is disabled the
+        flow is removed.
 
         Args:
             event (:class:`~kytos.core.events.KytosEvent`):
@@ -185,6 +196,23 @@ class Main(KytosNApp):
 
         """
         self._handle_lldp_flows(event)
+
+    @listen_to('.*.connection.lost')
+    def on_connection_lost(self, event):
+        """Handle connection lost."""
+        self.handle_connection_lost(event)
+
+    def handle_connection_lost(self, event):
+        """Handle connection lost.
+        This is for keeping track to pop
+        interfaces.created status accordingly
+        """
+        switch = event.content['source'].switch
+        if not switch:
+            return
+        dpid = switch.dpid
+        with self._dpid_locks[dpid]:
+            self._rcvd_intfs_created.pop(dpid, None)
 
     @alisten_to("kytos/of_lldp.loop.action.log")
     async def on_lldp_loop_log_action(self, event: KytosEvent):
@@ -264,12 +292,13 @@ class Main(KytosNApp):
         switch = event.content["switch"]
         await self.loop_manager.handle_switch_metadata_changed(switch)
 
-    def _handle_lldp_flows(self, event):
+    def _handle_lldp_flows(self, event: KytosEvent):
         """Install or remove flows in a switch.
 
         Install a flow to send LLDP packets to the controller. The proactive
-        flow is installed whenever a switch interfaces.created is received.
-        If the switch is disabled the flow is removed.
+        flow is installed on interfaces.created or on switch.enabled (when
+        interfaces.created has already fired). If the switch is disabled the
+        flow is removed.
         """
         try:
             dpid = event.content['dpid']
@@ -285,6 +314,25 @@ class Main(KytosNApp):
                 self.use_vlan(event.content['interface'])
                 return
             raise
+
+        # per-dpid event out-of-order early return
+        with self._dpid_locks[dpid]:
+            if (
+                dpid in self._flows_ev_updated_at
+                and self._flows_ev_updated_at[dpid] > event.timestamp
+            ):
+                return
+            self._flows_ev_updated_at[dpid] = event.timestamp
+
+        if event.name == 'kytos/of_core.switch.interfaces.created':
+            self._rcvd_intfs_created[dpid] = event.timestamp
+        elif event.name == 'kytos/topology.switch.enabled':
+            if dpid not in self._rcvd_intfs_created:
+                log.info(
+                    f"switch.enabled for {dpid}: deferring LLDP flow "
+                    "install until interfaces.created"
+                )
+                return
 
         try:
             of_version = switch.connection.protocol.version
@@ -303,9 +351,10 @@ class Main(KytosNApp):
             return
 
         flow = None
-        if ((event.name.endswith("interfaces.created") and not installed_flows)
+        if ((event.name in self._install_event_names and not installed_flows)
                 or ("switch.disabled" in event.name and installed_flows)):
-            flow = self._build_lldp_flow(of_version, get_cookie(switch.dpid))
+            flow = self._build_lldp_flow(of_version,
+                                         get_cookie(switch.dpid))
 
         if flow:
             data = {'flows': [flow]}
@@ -328,7 +377,7 @@ class Main(KytosNApp):
         """Send flows to flow_manager to be installed/deleted"""
         endpoint = f'{settings.FLOW_MANAGER_URL}/flows/{switch.id}'
         client_error = {424, 404, 400}
-        if event_name == 'kytos/of_core.switch.interfaces.created':
+        if event_name in self._install_event_names:
             for flow in data['flows']:
                 flow.pop("cookie_mask", None)
             res = httpx.post(endpoint, json=data, timeout=10)
