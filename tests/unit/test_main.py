@@ -478,6 +478,51 @@ class TestMain:
         self.napp._handle_lldp_flows(older)
         mock_del.assert_not_called()
 
+    @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
+    def test_handle_lldp_flows_intf_created_not_skipped_when_out_of_order(
+        self, mock_flows, monkeypatch
+    ):
+        """interfaces.created must not be dropped by the out-of-order guard.
+
+        topology.switch.enabled arrives first (newer timestamp) and
+        is deferred because interfaces.created hasn't fired yet. Then
+        interfaces.created arrives with an older timestamp. The out-of-order
+        guard must not apply to non-topology events, so interfaces.created
+        should be processed and the LLDP flow installed.
+        """
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        intf_a = get_interface_mock("mock_a", 1, switch)
+        intf_b = get_interface_mock("mock_b", 2, switch)
+        switch.interfaces = {1: intf_a, 2: intf_b}
+        self.napp.controller.switches = {dpid: switch}
+
+        mock_post = MagicMock()
+        mock_post.return_value = Response(status_code=202)
+        monkeypatch.setattr("httpx.post", mock_post)
+        self.napp.use_vlan = MagicMock()
+
+        # Deferred because interfaces.created hasn't fired yet
+        enabled_event = get_kytos_event_mock(
+            name='kytos/topology.switch.enabled', content={'dpid': dpid}
+        )
+        enabled_event.timestamp = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        mock_flows.return_value = {}
+        self.napp._handle_lldp_flows(enabled_event)
+        assert mock_post.call_count == 0
+        assert dpid in self.napp._flows_ev_updated_at
+
+        # The out-of-order guard only applies to topology events
+        intf_created_event = get_kytos_event_mock(
+            name='kytos/of_core.switch.interfaces.created',
+            content={'dpid': dpid, 'interfaces': [intf_a, intf_b]},
+        )
+        intf_created_event.timestamp = datetime(2024, 1, 1,
+                                                tzinfo=timezone.utc)
+        self.napp._handle_lldp_flows(intf_created_event)
+        assert dpid in self.napp._rcvd_intfs_created
+        assert mock_post.call_count == 1
+
     @patch('napps.kytos.of_lldp.main.Main.use_vlan')
     def test_send_flow_switch_enabled(self, mock_use, monkeypatch):
         """send_flow with switch.enabled installs flow + calls use_vlan."""
