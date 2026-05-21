@@ -315,20 +315,24 @@ class Main(KytosNApp):
                 return
             raise
 
-        # per-dpid event out-of-order early return
+        # only consider topo_event_prefix for potential out of order early ret
+        topo_event_prefix = "kytos/topology.switch"
         with self._dpid_locks[dpid]:
             if (
                 dpid in self._flows_ev_updated_at
                 and self._flows_ev_updated_at[dpid] > event.timestamp
+                and event.name.startswith(topo_event_prefix)
             ):
                 return
-            self._flows_ev_updated_at[dpid] = event.timestamp
+
+            if event.name.startswith(topo_event_prefix):
+                self._flows_ev_updated_at[dpid] = event.timestamp
 
             if event.name == 'kytos/of_core.switch.interfaces.created':
                 self._rcvd_intfs_created[dpid] = event.timestamp
             elif event.name == 'kytos/topology.switch.enabled':
                 if dpid not in self._rcvd_intfs_created:
-                    log.debug(
+                    log.info(
                         f"switch.enabled for {dpid}: deferring LLDP flow "
                         "install until interfaces.created"
                     )
