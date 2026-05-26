@@ -1,6 +1,9 @@
 """Test Main methods."""
 import asyncio
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, call, patch
+
+import pytest
 
 from httpx import Response
 from kytos.core.events import KytosEvent
@@ -209,12 +212,19 @@ class TestMain:
         """Test handle_lldp_flow method."""
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+        intf_a = get_interface_mock("mock_a", 1, switch)
+        intf_b = get_interface_mock("mock_b", 2, switch)
+        switch.interfaces = {1: intf_a, 2: intf_b}
         self.napp.controller.switches = {dpid: switch}
-        event_post = get_kytos_event_mock(name='kytos/topology.switch.enabled',
-                                          content={'dpid': dpid})
+        event_post = get_kytos_event_mock(
+            name='kytos/of_core.switch.interfaces.created',
+            content={'dpid': dpid, 'interfaces': [intf_a, intf_b]},
+        )
+        event_post.timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
         event_del = get_kytos_event_mock(name='kytos/topology.switch.disabled',
                                          content={'dpid': dpid})
+        event_del.timestamp = datetime(2024, 1, 2, tzinfo=timezone.utc)
 
         mock_post, mock_del = MagicMock(), MagicMock()
         mock_post.return_value = Response(status_code=202)
@@ -226,13 +236,36 @@ class TestMain:
         self.napp.use_vlan = MagicMock()
         self.napp._handle_lldp_flows(event_post)
         mock_post.assert_called()
-        self.napp.use_vlan.assert_called_with(switch)
+        self.napp.use_vlan.assert_called_with(intf_a, intf_b)
+        assert dpid in self.napp._rcvd_intfs_created
 
         mock_flows.return_value = {"flows": "mocked_flows"}
         self.napp.make_vlan_available = MagicMock()
         self.napp._handle_lldp_flows(event_del)
         mock_del.assert_called()
         self.napp.make_vlan_available.assert_called_with(switch)
+        assert dpid in self.napp._rcvd_intfs_created
+
+    def test_handle_lldp_flows_interface_created(self):
+        """Test _handle_lldp_flows for interface.created event."""
+        switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+        intf = get_interface_mock("mock_a", 1, switch)
+        event = get_kytos_event_mock(
+            name='kytos/of_core.switch.interface.created',
+            content={'interface': intf},
+        )
+        self.napp.use_vlan = MagicMock()
+        self.napp._handle_lldp_flows(event)
+        self.napp.use_vlan.assert_called_once_with(intf)
+
+    def test_handle_lldp_flows_key_error_reraised(self):
+        """Test _handle_lldp_flows re-raises KeyError for unknown events."""
+        event = get_kytos_event_mock(
+            name='kytos/topology.switch.disabled',
+            content={},
+        )
+        with pytest.raises(KeyError):
+            self.napp._handle_lldp_flows(event)
 
     @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
     @patch("time.sleep")
@@ -240,12 +273,18 @@ class TestMain:
         """Test handle_lldp_flow method retries."""
         dpid = "00:00:00:00:00:00:00:01"
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+        intf_a = get_interface_mock("mock_a", 1, switch)
+        intf_b = get_interface_mock("mock_b", 2, switch)
+        switch.interfaces = {1: intf_a, 2: intf_b}
         mock_flows.return_value = {}
         mock_post = MagicMock()
         monkeypatch.setattr("httpx.post", mock_post)
         self.napp.controller.switches = {dpid: switch}
-        event_post = get_kytos_event_mock(name="kytos/topology.switch.enabled",
-                                          content={"dpid": dpid})
+        event_post = get_kytos_event_mock(
+            name="kytos/of_core.switch.interfaces.created",
+            content={"dpid": dpid, "interfaces": [intf_a, intf_b]},
+        )
+        event_post.timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
         mock = MagicMock()
         mock.request.method = "POST"
@@ -264,8 +303,11 @@ class TestMain:
         mock_get.return_value = MagicMock(
             status_code=400, is_server_error=False
         )
-        event_post = get_kytos_event_mock(name='kytos/topology.switch.enabled',
-                                          content={'dpid': dpid})
+        event_post = get_kytos_event_mock(
+            name='kytos/of_core.switch.interfaces.created',
+            content={'dpid': dpid, 'interfaces': []},
+        )
+        event_post.timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
         monkeypatch.setattr("httpx.get", mock_get)
         self.napp._handle_lldp_flows(event_post)
         assert mock_log.error.call_count == 1
@@ -274,13 +316,231 @@ class TestMain:
     def test_handle_lldp_flows_request_error(self, mock_log):
         """Test _handle_lldp_flows"""
         dpid = "00:00:00:00:00:00:00:01"
-        event_post = get_kytos_event_mock(name='kytos/topology.switch.enabled',
-                                          content={'dpid': dpid})
+        event_post = get_kytos_event_mock(
+            name='kytos/of_core.switch.interfaces.created',
+            content={'dpid': dpid, 'interfaces': []},
+        )
+        event_post.timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
         self.napp.get_flows_by_switch = MagicMock()
         exc = RetryError(MagicMock())
         self.napp.get_flows_by_switch.side_effect = exc
         self.napp._handle_lldp_flows(event_post)
         assert mock_log.error.call_count == 1
+
+    @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
+    def test_handle_lldp_flows_switch_enabled_before_intf_created(
+        self, mock_flows, monkeypatch
+    ):
+        """switch.enabled before interfaces.created: defer install."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        self.napp.controller.switches = {dpid: switch}
+        mock_post = MagicMock()
+        monkeypatch.setattr("httpx.post", mock_post)
+
+        event = get_kytos_event_mock(name='kytos/topology.switch.enabled',
+                                     content={'dpid': dpid})
+        event.timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        self.napp._handle_lldp_flows(event)
+        mock_post.assert_not_called()
+        mock_flows.assert_not_called()
+        assert dpid not in self.napp._rcvd_intfs_created
+
+    @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
+    def test_handle_lldp_flows_switch_enabled_after_intf_created(
+        self, mock_flows, monkeypatch
+    ):
+        """Bug-fix scenario: switch initially disabled, interfaces.created
+        fires, then later switch.enabled installs the flow."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        intf_a = get_interface_mock("mock_a", 1, switch)
+        intf_b = get_interface_mock("mock_b", 2, switch)
+        switch.interfaces = {1: intf_a, 2: intf_b}
+        self.napp.controller.switches = {dpid: switch}
+
+        mock_post = MagicMock()
+        mock_post.return_value = Response(status_code=202)
+        monkeypatch.setattr("httpx.post", mock_post)
+        self.napp.use_vlan = MagicMock()
+
+        event_intf = get_kytos_event_mock(
+            name='kytos/of_core.switch.interfaces.created',
+            content={'dpid': dpid, 'interfaces': [intf_a, intf_b]},
+        )
+        event_intf.timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        mock_flows.return_value = {}
+        self.napp._handle_lldp_flows(event_intf)
+        assert mock_post.call_count == 1
+        assert dpid in self.napp._rcvd_intfs_created
+
+        mock_del = MagicMock()
+        mock_del.return_value = Response(status_code=202)
+        monkeypatch.setattr("httpx.request", mock_del)
+        self.napp.make_vlan_available = MagicMock()
+        event_disable = get_kytos_event_mock(
+            name='kytos/topology.switch.disabled', content={'dpid': dpid}
+        )
+        event_disable.timestamp = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        mock_flows.return_value = {"flows": "mocked_flows"}
+        self.napp._handle_lldp_flows(event_disable)
+        assert mock_del.call_count == 1
+        assert dpid in self.napp._rcvd_intfs_created
+
+        event_enable = get_kytos_event_mock(
+            name='kytos/topology.switch.enabled', content={'dpid': dpid}
+        )
+        event_enable.timestamp = datetime(2024, 1, 3, tzinfo=timezone.utc)
+        mock_flows.return_value = {}
+        self.napp._handle_lldp_flows(event_enable)
+        assert mock_post.call_count == 2
+        assert self.napp.use_vlan.call_count == 2
+
+    @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
+    def test_handle_lldp_flows_switch_enabled_already_installed(
+        self, mock_flows, monkeypatch
+    ):
+        """switch.enabled with flow already installed: no POST (idempotent)."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        self.napp.controller.switches = {dpid: switch}
+        self.napp._rcvd_intfs_created[dpid] = datetime(
+            2024, 1, 1, tzinfo=timezone.utc
+        )
+
+        mock_post = MagicMock()
+        monkeypatch.setattr("httpx.post", mock_post)
+        mock_flows.return_value = {"flows": "mocked_flows"}
+        event = get_kytos_event_mock(name='kytos/topology.switch.enabled',
+                                     content={'dpid': dpid})
+        event.timestamp = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        self.napp._handle_lldp_flows(event)
+        mock_post.assert_not_called()
+
+    def test_handle_connection_lost_clears_state(self):
+        """connection.lost clears the dpid from _rcvd_intfs_created."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        self.napp._rcvd_intfs_created[dpid] = datetime(
+            2024, 1, 1, tzinfo=timezone.utc
+        )
+        source = MagicMock()
+        source.switch = switch
+        event = get_kytos_event_mock(
+            name='kytos/of_core.openflow.connection.lost',
+            content={'source': source},
+        )
+        self.napp.handle_connection_lost(event)
+        assert dpid not in self.napp._rcvd_intfs_created
+
+    def test_handle_connection_lost_no_switch(self):
+        """connection.lost with no switch returns early without error."""
+        source = MagicMock()
+        source.switch = None
+        event = get_kytos_event_mock(
+            name='kytos/of_core.openflow.connection.lost',
+            content={'source': source},
+        )
+        self.napp.handle_connection_lost(event)
+
+    @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
+    def test_handle_lldp_flows_out_of_order_event_ignored(
+        self, mock_flows, monkeypatch
+    ):
+        """Older event arriving after newer one is ignored."""
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        intf_a = get_interface_mock("mock_a", 1, switch)
+        intf_b = get_interface_mock("mock_b", 2, switch)
+        switch.interfaces = {1: intf_a, 2: intf_b}
+        self.napp.controller.switches = {dpid: switch}
+
+        mock_post = MagicMock()
+        mock_post.return_value = Response(status_code=202)
+        monkeypatch.setattr("httpx.post", mock_post)
+        self.napp.use_vlan = MagicMock()
+
+        newer = get_kytos_event_mock(
+            name='kytos/of_core.switch.interfaces.created',
+            content={'dpid': dpid, 'interfaces': [intf_a, intf_b]},
+        )
+        newer.timestamp = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        mock_flows.return_value = {}
+        self.napp._handle_lldp_flows(newer)
+        assert mock_post.call_count == 1
+
+        older = get_kytos_event_mock(
+            name='kytos/topology.switch.disabled', content={'dpid': dpid}
+        )
+        older.timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        mock_del = MagicMock()
+        monkeypatch.setattr("httpx.request", mock_del)
+        self.napp._handle_lldp_flows(older)
+        mock_del.assert_not_called()
+
+    @patch('napps.kytos.of_lldp.main.Main.get_flows_by_switch')
+    def test_handle_lldp_flows_intf_created_not_skipped_when_out_of_order(
+        self, mock_flows, monkeypatch
+    ):
+        """interfaces.created must not be dropped by the out-of-order guard.
+
+        topology.switch.enabled arrives first (newer timestamp) and
+        is deferred because interfaces.created hasn't fired yet. Then
+        interfaces.created arrives with an older timestamp. The out-of-order
+        guard must not apply to non-topology events, so interfaces.created
+        should be processed and the LLDP flow installed.
+        """
+        dpid = "00:00:00:00:00:00:00:01"
+        switch = get_switch_mock(dpid, 0x04)
+        intf_a = get_interface_mock("mock_a", 1, switch)
+        intf_b = get_interface_mock("mock_b", 2, switch)
+        switch.interfaces = {1: intf_a, 2: intf_b}
+        self.napp.controller.switches = {dpid: switch}
+
+        mock_post = MagicMock()
+        mock_post.return_value = Response(status_code=202)
+        monkeypatch.setattr("httpx.post", mock_post)
+        self.napp.use_vlan = MagicMock()
+
+        # Deferred because interfaces.created hasn't fired yet
+        enabled_event = get_kytos_event_mock(
+            name='kytos/topology.switch.enabled', content={'dpid': dpid}
+        )
+        enabled_event.timestamp = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        mock_flows.return_value = {}
+        self.napp._handle_lldp_flows(enabled_event)
+        assert mock_post.call_count == 0
+        assert dpid in self.napp._flows_ev_updated_at
+
+        # The out-of-order guard only applies to topology events
+        intf_created_event = get_kytos_event_mock(
+            name='kytos/of_core.switch.interfaces.created',
+            content={'dpid': dpid, 'interfaces': [intf_a, intf_b]},
+        )
+        intf_created_event.timestamp = datetime(2024, 1, 1,
+                                                tzinfo=timezone.utc)
+        self.napp._handle_lldp_flows(intf_created_event)
+        assert dpid in self.napp._rcvd_intfs_created
+        assert mock_post.call_count == 1
+
+    @patch('napps.kytos.of_lldp.main.Main.use_vlan')
+    def test_send_flow_switch_enabled(self, mock_use, monkeypatch):
+        """send_flow with switch.enabled installs flow + calls use_vlan."""
+        mock_post = MagicMock()
+        monkeypatch.setattr("httpx.post", mock_post)
+        mock_post.return_value = MagicMock(
+            status_code=202, is_server_error=False
+        )
+        event_name = 'kytos/topology.switch.enabled'
+        switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+        intf_a = get_interface_mock("mock_a", 1, switch)
+        intf_b = get_interface_mock("mock_b", 2, switch)
+        switch.interfaces = {1: intf_a, 2: intf_b}
+        data = {'flows': [{'cookie_mask': "mock_cookie"}]}
+        self.napp.send_flow(switch, event_name, data=data)
+        assert mock_post.call_count == 1
+        assert mock_use.call_count == 1
+        assert data['flows'] == [{}]
 
     @patch('napps.kytos.of_lldp.main.PO13')
     @patch('napps.kytos.of_lldp.main.AO13')
@@ -561,18 +821,18 @@ class TestMain:
         interface_b = get_interface_mock("mock_b", 2, switch)
         interface_b.use_tags = MagicMock()
         switch.interfaces = {1: interface_a, 2: interface_b}
-        self.napp.use_vlan(switch)
+        self.napp.use_vlan(interface_a, interface_b)
         assert interface_a.use_tags.call_count == 1
         assert interface_b.use_tags.call_count == 1
 
         interface_a.use_tags.side_effect = KytosTagsAreNotAvailable([], "1")
-        self.napp.use_vlan(switch)
+        self.napp.use_vlan(interface_a, interface_b)
         assert interface_a.use_tags.call_count == 2
         assert interface_b.use_tags.call_count == 2
         assert mock_log.error.call_count == 1
 
         self.napp.vlan_id = None
-        self.napp.use_vlan(switch)
+        self.napp.use_vlan(interface_a, interface_b)
         assert interface_a.use_tags.call_count == 2
         assert interface_b.use_tags.call_count == 2
 
@@ -621,13 +881,15 @@ class TestMain:
         mock_post.return_value = MagicMock(
             status_code=202, is_server_error=False
         )
-        event_name = 'kytos/topology.switch.enabled'
+        event_name = 'kytos/of_core.switch.interfaces.created'
         switch = get_switch_mock("00:00:00:00:00:00:00:01", 0x04)
+        intf_a = get_interface_mock("mock_a", 1, switch)
+        intf_b = get_interface_mock("mock_b", 2, switch)
+        switch.interfaces = {1: intf_a, 2: intf_b}
         data = {'flows': [{'cookie_mask': "mock_cookie"}]}
         self.napp.send_flow(switch, event_name, data=data)
 
         assert mock_use.call_count == 1
-        assert mock_use.call_args[0][0] == switch
         assert data['flows'] == [{}]
 
     @patch('napps.kytos.of_lldp.main.Main.make_vlan_available')
